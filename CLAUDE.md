@@ -18,5 +18,8 @@ line before accepting:
 - engine/verdict.py, engine/diff.py, engine/seeder.py,
   engine/ledger.py, engine/planner.py, safety/guard.py
 
+## Git commit conventions
+Do not include a `Co-Authored-By: Claude` trailer in any commit message.
+
 ## Everything else
 Draft more freely, but I'll still review it.
