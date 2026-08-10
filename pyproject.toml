@@ -31,9 +31,8 @@ dev = [
 # jinja2 (HTML report, Phase 4), pytest/testcontainers (Phase 3+),
 # fastapi (vulnerable demo API, Phase 3). Added in the phase that needs them.
 
-# No [project.scripts] entry point yet: the `wrongdoor` command points at
-# cli.py, which is Phase 1. Declaring it now would ship a command that imports
-# a file that doesn't exist.
+[project.scripts]
+wrongdoor = "wrongdoor.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wrongdoor"]
