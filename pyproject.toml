@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wrongdoor"
+version = "0.0.0"
+description = "Dynamic differential authorization tester: seeds real data per identity and proves cross-identity leaks."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "typer>=0.12",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+]
+
+# Phase 0 holds off on: openapi-core/prance (spec import, Phase 2),
+# jinja2 (HTML report, Phase 4), pytest/testcontainers (Phase 3+),
+# fastapi (vulnerable demo API, Phase 3). Added in the phase that needs them.
+
+# No [project.scripts] entry point yet: the `wrongdoor` command points at
+# cli.py, which is Phase 1. Declaring it now would ship a command that imports
+# a file that doesn't exist.
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wrongdoor"]

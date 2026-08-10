@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# WrongDoor: local secrets file — identities reference env vars or a
+# .gitignore'd secrets file, never inline in config (see docs/blueprint.md §13).
+secrets.yaml
+secrets.yml
