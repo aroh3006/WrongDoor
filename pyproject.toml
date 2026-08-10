@@ -17,6 +17,16 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+# Dev-only: tests (pytest) and the throwaway toy API used as a live target in
+# Phase 1 (fastapi + uvicorn). NOT runtime deps — the shipped tool needs only
+# the five above. The Phase 3 vulnerable demo API will formalize fastapi later.
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
 # Phase 0 holds off on: openapi-core/prance (spec import, Phase 2),
 # jinja2 (HTML report, Phase 4), pytest/testcontainers (Phase 3+),
 # fastapi (vulnerable demo API, Phase 3). Added in the phase that needs them.
@@ -27,3 +37,6 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wrongdoor"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
