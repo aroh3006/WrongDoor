@@ -58,7 +58,10 @@ class Operation:
 
 def load_operations(path: str | Path) -> list[Operation]:
     """Load an OpenAPI file (JSON or YAML) into an operation catalog."""
-    text = Path(path).read_text(encoding="utf-8")
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise SpecError(f"cannot read spec file {path}: {e}") from e
     return load_operations_from_string(text)
 
 
