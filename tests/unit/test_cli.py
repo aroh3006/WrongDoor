@@ -58,3 +58,22 @@ def test_seed_refuses_without_confirm_exits_3(tmp_path):
     spec.write_text(_MINIMAL_SPEC, encoding="utf-8")
     result = runner.invoke(app, ["seed", "--config", str(cfg), "--spec", str(spec)])
     assert result.exit_code == 3
+
+
+def test_run_dry_run_sends_nothing_exits_0(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(_VALID_CONFIG, encoding="utf-8")
+    spec = tmp_path / "s.yaml"
+    spec.write_text(_MINIMAL_SPEC, encoding="utf-8")
+    # --dry-run does no auth/seed/execute, so no --confirm-own-target is needed.
+    result = runner.invoke(app, ["run", "--config", str(cfg), "--spec", str(spec), "--dry-run"])
+    assert result.exit_code == 0
+
+
+def test_run_refuses_without_confirm_exits_3(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(_VALID_CONFIG, encoding="utf-8")
+    spec = tmp_path / "s.yaml"
+    spec.write_text(_MINIMAL_SPEC, encoding="utf-8")
+    result = runner.invoke(app, ["run", "--config", str(cfg), "--spec", str(spec)])
+    assert result.exit_code == 3

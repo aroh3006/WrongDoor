@@ -8,22 +8,33 @@ Exit codes (so CI can distinguish failure modes later):
 """
 
 import asyncio
+from collections import Counter
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from . import __version__
 from .banner import print_banner
 from .config.loader import ConfigError, load_config
 from .config.schema import Config
+from .engine.executor import execute
+from .engine.planner import plan_matrix
 from .engine.seeder import SeedOutcome
 from .engine.seeder import seed as seed_objects
+from .engine.verdict import Judgment, Verdict, findings, judge_all
 from .identity.base import AuthError
 from .identity.manager import aclose_all, authenticate_identities
 from .safety.guard import SafetyError, SafetyGuard
-from .spec.openapi import Operation, SpecError, load_operations
+from .spec.openapi import (
+    Operation,
+    SpecError,
+    access_operations,
+    create_operations,
+    load_operations,
+)
 
 app = typer.Typer(add_completion=False, help="WrongDoor — dynamic authorization tester.")
 _out = Console()
@@ -141,3 +152,109 @@ def _print_ledger(outcome: SeedOutcome) -> None:
     _out.print(table)
     for note in outcome.failures:
         _err.print(f"[yellow]note:[/yellow] {note}")
+
+
+@app.command("run")
+def run_cmd(
+    config: Path = typer.Option(..., "--config", "-c", help="Path to config.yaml"),
+    spec: Path = typer.Option(..., "--spec", "-s", help="Path to the OpenAPI spec"),
+    confirm_own_target: bool = typer.Option(
+        False, "--confirm-own-target", help="Confirm you own / are authorized to test this target"
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview scope offline; send no requests"),
+    include_mutations: bool = typer.Option(
+        False, "--include-mutations", help="Also test PUT/PATCH/DELETE (writes to the target!)"
+    ),
+) -> None:
+    """Full pipeline: authenticate, seed, sweep cross-identity access, and report findings."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as e:
+        _err.print(f"[red]config error:[/red] {e}")
+        raise typer.Exit(code=2)
+    try:
+        operations = load_operations(spec)
+    except SpecError as e:
+        _err.print(f"[red]spec error:[/red] {e}")
+        raise typer.Exit(code=5)
+
+    if dry_run:
+        _print_dry_run(cfg, operations)  # offline: no auth, no seed, no requests
+        return
+
+    guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=confirm_own_target)
+    try:
+        judgments = asyncio.run(
+            _run_pipeline(cfg, operations, guard, include_mutations=include_mutations)
+        )
+    except SafetyError as e:
+        _err.print(f"[red]refused:[/red] {e}")
+        raise typer.Exit(code=3)
+    except AuthError as e:
+        _err.print(f"[red]auth failed:[/red] {e}")
+        raise typer.Exit(code=4)
+
+    if _print_findings(judgments):
+        raise typer.Exit(code=1)  # confirmed findings -> non-zero exit for CI
+
+
+async def _run_pipeline(
+    cfg: Config,
+    operations: list[Operation],
+    guard: SafetyGuard,
+    *,
+    transport=None,
+    include_mutations: bool = False,
+) -> list[Judgment]:
+    # transport is injectable so tests can drive the whole pipeline against an
+    # in-process ASGI app; production passes None (real network).
+    registry = await authenticate_identities(cfg, guard, transport=transport)
+    try:
+        outcome = await seed_objects(cfg, registry, operations, guard)
+        planned = plan_matrix(
+            outcome.ledger,
+            operations,
+            list(registry.keys()),
+            policy=cfg.policy.rule,
+            include_mutations=include_mutations,
+        )
+        results = await execute(planned, registry)
+        judgments = judge_all(results, outcome.ledger)
+    finally:
+        await aclose_all(registry)
+    return judgments
+
+
+def _print_dry_run(cfg: Config, operations: list[Operation]) -> None:
+    _out.print(f"[bold]dry run[/bold] — target {cfg.target.base_url} (no requests will be sent)")
+    _out.print("identities: " + ", ".join(i.id for i in cfg.identities))
+    creates = ", ".join(f"{o.method} {o.path_template}" for o in create_operations(operations)) or "(none)"
+    accesses = ", ".join(f"{o.method} {o.path_template}" for o in access_operations(operations)) or "(none)"
+    _out.print(f"would seed (create-ops): {creates}")
+    _out.print(f"would sweep (access-ops): {accesses}")
+
+
+def _print_findings(judgments: list[Judgment]) -> list[Judgment]:
+    counts = Counter(j.verdict for j in judgments)
+    _out.print(
+        f"\nchecks: {len(judgments)}   "
+        f"[red]violations={counts[Verdict.VIOLATION]}[/red]   "
+        f"pass={counts[Verdict.PASS]}   broken={counts[Verdict.BROKEN]}   "
+        f"inconclusive={counts[Verdict.INCONCLUSIVE]}\n"
+    )
+    found = findings(judgments)
+    for j in found:
+        r = j.request
+        lines = [
+            f"actor:      {r.acting_identity}",
+            f"victim:     {j.owner} owns {r.target.resource_type}/{r.target.object_id}",
+            f"operation:  {r.method} {r.operation_id}",
+            "",
+            "reproducible request pair:",
+            f"  canonical: {r.method} {r.path}  as {j.owner}   -> 200",
+            f"  attack:    {r.method} {r.path}  as {r.acting_identity}   -> {j.observed.status}",
+            "",
+            f"body match: {', '.join(j.matched_fields)}",
+        ]
+        _out.print(Panel("\n".join(lines), title=f"VIOLATION · BOLA · {r.operation_id}", border_style="red"))
+    return found
