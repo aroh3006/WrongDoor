@@ -100,3 +100,32 @@ def get_document(document_id: int, authorization: str | None = Header(default=No
     if doc["owner"] != user:  # CORRECT ownership check -- the false-positive control
         raise HTTPException(status_code=403, detail="forbidden")
     return doc
+
+
+# --- notes: PLANTED BUG (D3, missing authentication) -----------------------
+# POST requires auth, but GET requires NO token at all -> anyone (unauthenticated)
+# can read any note. (This is also a BOLA for an authenticated non-owner.)
+_NOTES: dict[int, dict] = {}
+
+
+class NoteIn(BaseModel):
+    title: str
+    body: str = ""
+
+
+@app.post("/notes", status_code=201)
+def create_note(body: NoteIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_user(authorization)
+    note = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "title": body.title, "body": body.body}
+    _NOTES[_next_id] = note
+    _next_id += 1
+    return note
+
+
+@app.get("/notes/{note_id}")
+def get_note(note_id: int) -> dict:  # NO auth parameter, NO check -> missing authentication
+    note = _NOTES.get(note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return note

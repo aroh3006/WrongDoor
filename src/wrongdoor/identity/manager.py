@@ -76,3 +76,11 @@ async def aclose_all(registry: dict[str, AuthedClient]) -> None:
     """Close every authenticated client (call in the CLI's finally)."""
     for authed in registry.values():
         await authed.client.aclose()
+
+
+def make_anonymous_client(identity_id: str, base_url: str, *, transport=None) -> AuthedClient:
+    """An unauthenticated client (no auth headers) for the D3 (missing-auth) detector."""
+    client = httpx.AsyncClient(
+        base_url=base_url, transport=transport, follow_redirects=False, timeout=_DEFAULT_TIMEOUT
+    )
+    return AuthedClient(identity_id=identity_id, client=client, attributes={})

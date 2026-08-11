@@ -26,6 +26,9 @@ from .ledger import ObjectRef, OwnershipLedger
 
 _MUTATION_METHODS = {"PUT", "PATCH", "DELETE"}
 
+# Reserved actor id for the unauthenticated (D3) rows — a client with no auth.
+ANONYMOUS_ID = "__anonymous__"
+
 
 class Expectation(Enum):
     """What the policy says *should* happen for a planned (actor, object, op)."""
@@ -43,6 +46,7 @@ class PlannedRequest:
     target: ObjectRef
     expected: Expectation
     is_mutation: bool
+    check: str = "bola"  # which detector this row belongs to: bola | unauth | bfla
 
 
 def plan_matrix(
@@ -52,6 +56,7 @@ def plan_matrix(
     *,
     policy: str = "owner_only",
     include_mutations: bool = False,
+    include_unauth: bool = False,
 ) -> list[PlannedRequest]:
     accesses = access_operations(operations)
     planned: list[PlannedRequest] = []
@@ -69,6 +74,7 @@ def plan_matrix(
             param = op.object_id_params[0]
             concrete_path = op.path_template.replace("{" + param.name + "}", entry.object_id)
 
+            # BOLA (D1): every non-owner identity should be denied.
             for actor in identities:
                 if actor == entry.owner:
                     continue  # self-owned cell: authorized, not a test
@@ -81,6 +87,23 @@ def plan_matrix(
                         target=entry.ref,
                         expected=_expected(policy, actor, entry.owner),
                         is_mutation=is_mutation,
+                        check="bola",
+                    )
+                )
+
+            # Missing auth (D3): one row from an unauthenticated caller. Reads only —
+            # we never fire unauthenticated writes at a target.
+            if include_unauth and not is_mutation:
+                planned.append(
+                    PlannedRequest(
+                        acting_identity=ANONYMOUS_ID,
+                        method=op.method,
+                        path=concrete_path,
+                        operation_id=op.operation_id,
+                        target=entry.ref,
+                        expected=Expectation.DENY,
+                        is_mutation=is_mutation,
+                        check="unauth",
                     )
                 )
 

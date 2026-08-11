@@ -11,6 +11,7 @@ import asyncio
 import socket
 import threading
 import time
+from collections import Counter
 from pathlib import Path
 
 import uvicorn
@@ -64,8 +65,8 @@ def test_run_over_a_real_socket(monkeypatch):
 
         judgments = asyncio.run(_run_pipeline(cfg, ops, guard))  # transport=None -> real TCP
         fs = findings(judgments)
-        assert len(fs) == 2
-        assert all(f.request.operation_id == "getInvoice" for f in fs)
+        assert len(fs) == 6  # 4 BOLA (invoices + notes) + 2 MISSING_AUTH (notes)
+        assert Counter(f.request.check for f in fs) == {"bola": 4, "unauth": 2}
     finally:
         server.should_exit = True
         thread.join(timeout=5)

@@ -15,3 +15,4 @@ policy:
 resources:
   invoices: {sensitivity: high}    # financial data -> cross-tenant leak scores Critical
   documents: {sensitivity: low}
+  notes: {sensitivity: medium}     # missing-auth read -> unauthenticated bump to High

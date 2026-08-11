@@ -107,6 +107,14 @@ class ResourceConfig(BaseModel):
     sensitivity: Literal["low", "medium", "high"] = "medium"
 
 
+class DetectorsConfig(BaseModel):
+    """Which detectors run beyond the always-on BOLA sweep (§7)."""
+
+    model_config = ConfigDict(extra="forbid")
+    # D3: replay each read-op as an unauthenticated caller (reads only).
+    unauthenticated: bool = True
+
+
 class Config(BaseModel):
     """The whole validated configuration."""
 
@@ -118,6 +126,7 @@ class Config(BaseModel):
     # Optional per-resource risk inputs, keyed by resource_type. Defaults to
     # medium sensitivity for any resource not listed.
     resources: dict[str, ResourceConfig] = Field(default_factory=dict)
+    detectors: DetectorsConfig = Field(default_factory=DetectorsConfig)
 
     @model_validator(mode="after")
     def _identity_ids_unique(self) -> "Config":

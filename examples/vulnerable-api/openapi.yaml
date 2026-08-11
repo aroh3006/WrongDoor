@@ -52,6 +52,30 @@ paths:
       responses:
         "200":
           description: ok
+  /notes:
+    post:
+      operationId: createNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteIn"
+      responses:
+        "201":
+          description: created
+  /notes/{note_id}:
+    get:
+      operationId: getNote
+      parameters:
+        - name: note_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
 components:
   schemas:
     InvoiceIn:
@@ -63,6 +87,14 @@ components:
           type: string
       required: [amount]
     DocumentIn:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+      required: [title]
+    NoteIn:
       type: object
       properties:
         title:

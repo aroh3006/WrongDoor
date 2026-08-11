@@ -19,12 +19,12 @@ from .banner import print_banner
 from .config.loader import ConfigError, load_config
 from .config.schema import Config
 from .engine.executor import execute
-from .engine.planner import plan_matrix
+from .engine.planner import ANONYMOUS_ID, plan_matrix
 from .engine.seeder import SeedOutcome
 from .engine.seeder import seed as seed_objects
 from .engine.verdict import Judgment, judge_all
 from .identity.base import AuthError
-from .identity.manager import aclose_all, authenticate_identities
+from .identity.manager import aclose_all, authenticate_identities, make_anonymous_client
 from .lint.sanity import lint
 from .report import html, json_report, junit, sarif, terminal
 from .report.finding import build_findings, max_severity
@@ -260,12 +260,19 @@ async def _run_pipeline(
     registry = await authenticate_identities(cfg, guard, transport=transport)
     try:
         outcome = await seed_objects(cfg, registry, operations, guard)
+        real_ids = list(registry.keys())  # real identities only (excludes anonymous)
+        include_unauth = cfg.detectors.unauthenticated
+        if include_unauth:
+            registry[ANONYMOUS_ID] = make_anonymous_client(
+                ANONYMOUS_ID, cfg.target.base_url, transport=transport
+            )
         planned = plan_matrix(
             outcome.ledger,
             operations,
-            list(registry.keys()),
+            real_ids,
             policy=cfg.policy.rule,
             include_mutations=include_mutations,
+            include_unauth=include_unauth,
         )
         results = await execute(planned, registry)
         judgments = judge_all(results, outcome.ledger)

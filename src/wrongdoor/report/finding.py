@@ -9,8 +9,14 @@ bodies appear solely when ``include_bodies=True`` (§13).
 from dataclasses import dataclass
 
 from ..config.schema import Config
+from ..engine.planner import ANONYMOUS_ID
 from ..engine.verdict import Judgment, Verdict
-from ..explain import explain_bola, remediate_bola
+from ..explain import (
+    explain_bola,
+    explain_missing_auth,
+    remediate_bola,
+    remediate_missing_auth,
+)
 from ..risk import Severity, score
 
 
@@ -75,41 +81,43 @@ def build_findings(judgments: list[Judgment], config: Config) -> list[Finding]:
         if j.verdict is not Verdict.VIOLATION:
             continue
         req = j.request
-        actor_tenant = id_attrs.get(req.acting_identity, {}).get("tenant")
         owner_tenant = id_attrs.get(j.owner or "", {}).get("tenant")
-        cross = actor_tenant is not None and owner_tenant is not None and actor_tenant != owner_tenant
+        rt, oid = req.target.resource_type, req.target.object_id
+        matched = tuple(j.matched_fields)
+
+        if req.check == "unauth" or req.acting_identity == ANONYMOUS_ID:
+            finding_type = "MISSING_AUTH"
+            actor, actor_tenant = "anonymous", None
+            fingerprint = f"WD-MISSING_AUTH-{req.operation_id}-{rt}"
+            explanation = explain_missing_auth(j.owner, owner_tenant, rt, oid, req.method, req.operation_id, matched)
+            remediation = remediate_missing_auth(rt, req.method, req.operation_id)
+        else:
+            finding_type = "BOLA"
+            actor = req.acting_identity
+            actor_tenant = id_attrs.get(actor, {}).get("tenant")
+            cross = actor_tenant is not None and owner_tenant is not None and actor_tenant != owner_tenant
+            fingerprint = f"WD-BOLA-{req.operation_id}-{rt}-{'cross-tenant' if cross else 'same-tenant'}"
+            explanation = explain_bola(actor, actor_tenant, j.owner, owner_tenant, rt, oid, req.method, req.operation_id, matched)
+            remediation = remediate_bola(rt, req.method, req.operation_id)
 
         findings.append(
             Finding(
-                fingerprint=(
-                    f"WD-BOLA-{req.operation_id}-{req.target.resource_type}-"
-                    f"{'cross-tenant' if cross else 'same-tenant'}"
-                ),
-                finding_type="BOLA",
+                fingerprint=fingerprint,
+                finding_type=finding_type,
                 severity=score(j, id_attrs, resources),
-                actor=req.acting_identity,
+                actor=actor,
                 actor_tenant=actor_tenant,
                 owner=j.owner,
                 owner_tenant=owner_tenant,
-                resource_type=req.target.resource_type,
-                object_id=req.target.object_id,
+                resource_type=rt,
+                object_id=oid,
                 method=req.method,
                 operation_id=req.operation_id,
                 path=req.path,
                 status=j.observed.status,
-                matched_fields=tuple(j.matched_fields),
-                explanation=explain_bola(
-                    req.acting_identity,
-                    actor_tenant,
-                    j.owner,
-                    owner_tenant,
-                    req.target.resource_type,
-                    req.target.object_id,
-                    req.method,
-                    req.operation_id,
-                    tuple(j.matched_fields),
-                ),
-                remediation=remediate_bola(req.target.resource_type, req.method, req.operation_id),
+                matched_fields=matched,
+                explanation=explanation,
+                remediation=remediation,
                 judgment=j,
             )
         )

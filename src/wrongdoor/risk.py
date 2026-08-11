@@ -54,6 +54,9 @@ def score(
     if judgment.request.is_mutation:
         band = _bump(band)  # a write/delete is worse than the equivalent read
 
+    if judgment.request.check == "unauth":
+        band = _bump(band)  # exposed to any anonymous caller — worse than a cross-identity leak
+
     return band
 
 

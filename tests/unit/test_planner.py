@@ -1,7 +1,7 @@
 """Unit tests for the Matrix Planner (§5.8)."""
 
 from wrongdoor.engine.ledger import ObjectRef, OwnershipLedger
-from wrongdoor.engine.planner import Expectation, plan_matrix
+from wrongdoor.engine.planner import ANONYMOUS_ID, Expectation, plan_matrix
 from wrongdoor.spec.openapi import _operations_from_resolved
 
 _SPEC = {
@@ -56,6 +56,18 @@ def test_third_identity_gets_planned_against_both_objects():
     planned = plan_matrix(_ledger(), _OPS, identities=["alice", "bob", "carol"])
     carol = {p.path for p in planned if p.acting_identity == "carol"}
     assert carol == {"/invoices/1000", "/invoices/1001"}  # non-owner of both
+
+
+def test_include_unauth_adds_anonymous_read_rows():
+    planned = plan_matrix(_ledger(), _OPS, identities=["alice", "bob"], include_unauth=True)
+    unauth = [p for p in planned if p.check == "unauth"]
+    # one anonymous GET per object (reads only — the DELETE is excluded)
+    assert {(p.acting_identity, p.path) for p in unauth} == {
+        (ANONYMOUS_ID, "/invoices/1000"),
+        (ANONYMOUS_ID, "/invoices/1001"),
+    }
+    assert all(p.method == "GET" and p.expected is Expectation.DENY for p in unauth)
+    assert any(p.check == "bola" for p in planned)  # BOLA rows still present
 
 
 def test_no_plans_when_resource_type_has_no_access_ops():

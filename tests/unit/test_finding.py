@@ -17,7 +17,7 @@ def _config():
                 {"id": "alice", "attributes": {"tenant": "A"}, "auth": {"type": "bearer", "token_env": "A"}},
                 {"id": "bob", "attributes": {"tenant": "B"}, "auth": {"type": "bearer", "token_env": "B"}},
             ],
-            "resources": {"invoices": {"sensitivity": "high"}},
+            "resources": {"invoices": {"sensitivity": "high"}, "notes": {"sensitivity": "medium"}},
         }
     )
 
@@ -79,3 +79,32 @@ def test_to_dict_redacts_by_default_and_can_include_bodies():
 def test_max_severity():
     assert max_severity(build_findings([_violation()], _config())) is Severity.CRITICAL
     assert max_severity([]) is None
+
+
+def test_unauthenticated_violation_becomes_missing_auth_finding():
+    from wrongdoor.engine.planner import ANONYMOUS_ID
+
+    req = PlannedRequest(
+        acting_identity=ANONYMOUS_ID,
+        method="GET",
+        path="/notes/5",
+        operation_id="getNote",
+        target=ObjectRef("notes", "5"),
+        expected=Expectation.DENY,
+        is_mutation=False,
+        check="unauth",
+    )
+    j = Judgment(
+        verdict=Verdict.VIOLATION,
+        reason="x",
+        request=req,
+        observed=ObservedResponse(status=200, body={"id": 5, "owner": "alice"}),
+        owner="alice",
+        matched_fields=("id", "owner"),
+    )
+    f = build_findings([j], _config())[0]
+    assert f.finding_type == "MISSING_AUTH"
+    assert f.actor == "anonymous"
+    assert f.severity is Severity.HIGH  # medium sensitivity + unauthenticated bump
+    assert f.fingerprint == "WD-MISSING_AUTH-getNote-notes"
+    assert "unauthenticated" in f.explanation.lower()

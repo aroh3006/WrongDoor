@@ -36,3 +36,28 @@ def remediate_bola(resource_type: str, method: str, operation_id: str) -> str:
         f"the object: verify the {resource_type} belongs to the caller "
         f"(e.g. WHERE id = :id AND owner = current_user) and return 403/404 otherwise."
     )
+
+
+def explain_missing_auth(
+    owner: str | None,
+    owner_tenant: str | None,
+    resource_type: str,
+    object_id: str,
+    method: str,
+    operation_id: str,
+    matched_fields: tuple[str, ...],
+) -> str:
+    whose = f"{owner!r}" + (f" (tenant {owner_tenant})" if owner_tenant else "")
+    fields = ", ".join(matched_fields) if matched_fields else "the object"
+    return (
+        f"An unauthenticated caller accessed {resource_type}/{object_id}, owned by {whose}, "
+        f"via {method} {operation_id}. The response contained the owner's data ({fields}), "
+        f"confirming the endpoint serves protected data without authentication."
+    )
+
+
+def remediate_missing_auth(resource_type: str, method: str, operation_id: str) -> str:
+    return (
+        f"Require authentication on {method} {operation_id}: reject requests without a valid "
+        f"token (401) before returning any {resource_type}, then enforce an ownership check."
+    )

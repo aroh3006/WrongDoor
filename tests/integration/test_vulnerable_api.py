@@ -29,3 +29,12 @@ def test_documents_is_the_secure_control():
     doc = client.post("/documents", json={"title": "t", "body": "b"}, headers=alice).json()
     # bob reads ALICE's document -> 403: the control.
     assert client.get(f"/documents/{doc['id']}", headers=bob).status_code == 403
+
+
+def test_notes_has_missing_authentication():
+    alice = {"Authorization": f"Bearer {_token('alice', 'alice-pw')}"}
+    note = client.post("/notes", json={"title": "t", "body": "b"}, headers=alice).json()
+    # NO auth header at all -> still returns alice's note: missing authentication.
+    resp = client.get(f"/notes/{note['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["owner"] == "alice"
