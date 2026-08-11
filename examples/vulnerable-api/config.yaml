@@ -12,10 +12,14 @@ identities:
     auth: {type: login, url: /login, username: bob, password_env: BOB_PW}
 policy:
   rule: owner_only
+seeding:
+  dependencies:
+    - {resource: projects, parent: orgs, body_field: org_id}   # a project needs an owned org
 resources:
   invoices: {sensitivity: high}    # financial data -> cross-tenant leak scores Critical
   documents: {sensitivity: low}
   notes: {sensitivity: medium}     # missing-auth read -> unauthenticated bump to High
+  projects: {sensitivity: medium}
 operations:
   getAllInvoices: {privileged: true, requires_role: admin}   # BFLA: no role check in the app
   getAllUsers: {privileged: true, requires_role: admin}      # control: app DOES check the role

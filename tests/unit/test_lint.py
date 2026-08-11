@@ -34,6 +34,26 @@ def test_missing_secret_env_is_a_warning_not_an_error():
     assert any("ALICE_PW" in w for w in report.warnings)
 
 
+def test_dependency_cycle_is_an_error():
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://127.0.0.1:8000", "allow": ["127.0.0.1"]},
+            "identities": [
+                {"id": "alice", "auth": {"type": "login", "url": "/login", "username": "alice", "password_env": "ALICE_PW"}}
+            ],
+            "seeding": {
+                "dependencies": [
+                    {"resource": "a", "parent": "b", "body_field": "b_id"},
+                    {"resource": "b", "parent": "a", "body_field": "a_id"},
+                ]
+            },
+        }
+    )
+    report = lint(cfg, env={"ALICE_PW": "x"})
+    assert not report.ok
+    assert any("cycle" in e for e in report.errors)
+
+
 def test_spec_aware_mismatch_warnings():
     spec = {
         "paths": {

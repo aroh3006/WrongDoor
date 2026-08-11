@@ -25,6 +25,33 @@ class LintReport:
         return not self.errors
 
 
+def _dependency_cycle(dependencies) -> list[str] | None:
+    """Return a cycle path in the child->parent dependency graph, or None. This is
+    the only graph traversal in the tool (§5.3) — a small DFS with a visiting set."""
+    parent_of = {d.resource: d.parent for d in dependencies}
+    state: dict[str, str] = {}
+
+    def visit(resource: str, stack: list[str]) -> list[str] | None:
+        if state.get(resource) == "done":
+            return None
+        if state.get(resource) == "visiting":
+            return stack[stack.index(resource):] + [resource]
+        state[resource] = "visiting"
+        parent = parent_of.get(resource)
+        if parent is not None:
+            found = visit(parent, stack + [resource])
+            if found:
+                return found
+        state[resource] = "done"
+        return None
+
+    for resource in list(parent_of):
+        found = visit(resource, [])
+        if found:
+            return found
+    return None
+
+
 def _secret_vars(auth) -> list[str]:
     if isinstance(auth, BearerAuthConfig):
         return [auth.token_env]
@@ -49,6 +76,11 @@ def lint(
         report.errors.append(
             "target.base_url host is not in target.allow — the run would be refused"
         )
+
+    # ERROR: a cycle in the seeding dependency graph can never be ordered (§5.3).
+    cycle = _dependency_cycle(config.seeding.dependencies)
+    if cycle:
+        report.errors.append("resource dependency cycle: " + " -> ".join(cycle))
 
     # WARNING: referenced secret env vars that aren't set (auth will fail at runtime).
     for identity in config.identities:

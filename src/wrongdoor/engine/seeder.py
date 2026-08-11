@@ -40,6 +40,10 @@ from ..spec.openapi import (
 from .ledger import OwnershipLedger
 
 
+class SeederError(Exception):
+    """Raised on an unseedable configuration (e.g. a dependency cycle)."""
+
+
 @dataclass
 class SeedOutcome:
     ledger: OwnershipLedger
@@ -62,6 +66,8 @@ async def seed(
     login_paths = _login_paths(config)
 
     creates = [o for o in create_operations(operations) if o.path_template not in login_paths]
+    deps = {d.resource: d for d in config.seeding.dependencies}
+    creates = _order_by_dependency(creates, deps)  # parents before children (cycle -> SeederError)
     accesses = access_operations(operations)
 
     outcome = SeedOutcome(ledger=ledger)
@@ -74,6 +80,21 @@ async def seed(
                 break
 
             body = synthesize_body(op.request_schema)
+
+            # Dependency chain: attach this child to a parent object the SAME
+            # identity owns, so ownership chains cleanly (alice's org -> project).
+            dep = deps.get(op.resource_type)
+            if dep is not None:
+                parent = _first_owned(ledger, dep.parent, identity_id)
+                if parent is None:
+                    outcome.failures.append(
+                        f"{op.operation_id} as {identity_id}: no {dep.parent!r} parent object to attach to"
+                    )
+                    continue
+                if isinstance(body, dict):
+                    pid = parent.object_id
+                    body[dep.body_field] = int(pid) if pid.isdigit() else pid
+
             create_url = _join(base_url, op.path_template)
             guard.assert_allowed(create_url)  # LIVE WRITE — gate first
 
@@ -107,6 +128,50 @@ async def seed(
 
 
 # --- helpers ---------------------------------------------------------------
+def _order_by_dependency(creates: list[Operation], deps: dict) -> list[Operation]:
+    """Order create-ops so a parent resource is always seeded before its children."""
+    by_resource: dict[str, list[Operation]] = {}
+    for op in creates:
+        by_resource.setdefault(op.resource_type, []).append(op)
+    # Only keep edges whose parent is actually being created here.
+    parent_of = {
+        r: deps[r].parent for r in by_resource if r in deps and deps[r].parent in by_resource
+    }
+    ordered: list[Operation] = []
+    for resource in _toposort(list(by_resource), parent_of):
+        ordered.extend(by_resource[resource])
+    return ordered
+
+
+def _toposort(resources: list[str], parent_of: dict[str, str]) -> list[str]:
+    order: list[str] = []
+    state: dict[str, str] = {}
+
+    def visit(resource: str, stack: list[str]) -> None:
+        if state.get(resource) == "done":
+            return
+        if state.get(resource) == "visiting":
+            cycle = stack[stack.index(resource):] + [resource]
+            raise SeederError("resource dependency cycle: " + " -> ".join(cycle))
+        state[resource] = "visiting"
+        parent = parent_of.get(resource)
+        if parent is not None:
+            visit(parent, stack + [resource])
+        state[resource] = "done"
+        order.append(resource)  # parent already appended -> parents come first
+
+    for resource in resources:
+        visit(resource, [])
+    return order
+
+
+def _first_owned(ledger: OwnershipLedger, resource_type: str, identity: str):
+    for entry in ledger.objects_owned_by(identity):
+        if entry.resource_type == resource_type:
+            return entry
+    return None
+
+
 def _login_paths(config: Config) -> set[str]:
     """Paths that are login endpoints — never seed these even if the spec lists them."""
     return {

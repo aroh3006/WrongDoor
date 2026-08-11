@@ -62,6 +62,9 @@ def test_run_over_a_real_socket(monkeypatch):
                     "getAllInvoices": {"privileged": True, "requires_role": "admin"},
                     "getAllUsers": {"privileged": True, "requires_role": "admin"},
                 },
+                "seeding": {
+                    "dependencies": [{"resource": "projects", "parent": "orgs", "body_field": "org_id"}]
+                },
             }
         )
         ops = load_operations(_VULN / "openapi.yaml")
@@ -69,8 +72,8 @@ def test_run_over_a_real_socket(monkeypatch):
 
         judgments = asyncio.run(_run_pipeline(cfg, ops, guard))  # transport=None -> real TCP
         fs = findings(judgments)
-        assert len(fs) == 8  # 4 BOLA + 2 MISSING_AUTH + 2 BFLA
-        assert Counter(f.request.check for f in fs) == {"bola": 4, "unauth": 2, "bfla": 2}
+        assert len(fs) == 10  # 6 BOLA (incl. chained projects) + 2 MISSING_AUTH + 2 BFLA
+        assert Counter(f.request.check for f in fs) == {"bola": 6, "unauth": 2, "bfla": 2}
     finally:
         server.should_exit = True
         thread.join(timeout=5)

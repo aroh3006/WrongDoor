@@ -144,3 +144,51 @@ def admin_all_users(authorization: str | None = Header(default=None)) -> dict:
     if _USERS[user].get("role") != "admin":  # CORRECT role check -- the BFLA control
         raise HTTPException(status_code=403, detail="forbidden")
     return {"users": list(_USERS.keys())}
+
+
+# --- orgs -> projects: a create-CHAIN (a project needs an owned org) ---------
+# Creating a project REQUIRES a valid org_id the caller owns, so WrongDoor must
+# seed an org first and inject its id. GET /projects/{id} is BOLA (no ownership).
+_ORGS: dict[int, dict] = {}
+_PROJECTS: dict[int, dict] = {}
+
+
+class OrgIn(BaseModel):
+    name: str = ""
+
+
+class ProjectIn(BaseModel):
+    org_id: int
+    name: str = ""
+
+
+@app.post("/orgs", status_code=201)
+def create_org(body: OrgIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_user(authorization)
+    org = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "name": body.name}
+    _ORGS[_next_id] = org
+    _next_id += 1
+    return org
+
+
+@app.post("/projects", status_code=201)
+def create_project(body: ProjectIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_user(authorization)
+    org = _ORGS.get(body.org_id)
+    if org is None or org["owner"] != user:  # must own the parent org
+        raise HTTPException(status_code=400, detail="invalid or unowned org_id")
+    project = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "org_id": body.org_id, "name": body.name}
+    _PROJECTS[_next_id] = project
+    _next_id += 1
+    return project
+
+
+@app.get("/projects/{project_id}")
+def get_project(project_id: int, authorization: str | None = Header(default=None)) -> dict:
+    _require_user(authorization)  # authenticated, but NO ownership check -> BOLA
+    project = _PROJECTS.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return project

@@ -88,6 +88,42 @@ paths:
       responses:
         "200":
           description: ok
+  /orgs:
+    post:
+      operationId: createOrg
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgIn"
+      responses:
+        "201":
+          description: created
+  /projects:
+    post:
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectIn"
+      responses:
+        "201":
+          description: created
+  /projects/{project_id}:
+    get:
+      operationId: getProject
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
 components:
   schemas:
     InvoiceIn:
@@ -114,3 +150,16 @@ components:
         body:
           type: string
       required: [title]
+    OrgIn:
+      type: object
+      properties:
+        name:
+          type: string
+    ProjectIn:
+      type: object
+      properties:
+        org_id:
+          type: integer
+        name:
+          type: string
+      required: [org_id]

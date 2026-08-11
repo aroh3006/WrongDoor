@@ -149,3 +149,66 @@ def test_seed_propagates_guard_refusal():
 
     with pytest.raises(SafetyError):
         asyncio.run(_run_seed(_config(), registry, _OPS, guard))
+
+
+# --- dependency chains -----------------------------------------------------
+_CHAIN_SPEC = {
+    "paths": {
+        "/orgs": {"post": {"operationId": "createOrg", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"name": {"type": "string"}}}}}}, "responses": {}}},
+        "/projects": {"post": {"operationId": "createProject", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"org_id": {"type": "integer"}, "name": {"type": "string"}}, "required": ["org_id"]}}}}, "responses": {}}},
+        "/projects/{project_id}": {"get": {"operationId": "getProject", "parameters": [{"name": "project_id", "in": "path", "required": True, "schema": {"type": "integer"}}], "responses": {}}},
+    }
+}
+
+
+def _chain_handler():
+    orgs: dict[int, dict] = {}
+    projects: dict[int, dict] = {}
+    counter = {"n": 1000}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        user = req.headers.get("authorization", "").removeprefix("Bearer ")
+        if req.method == "POST" and req.url.path == "/orgs":
+            oid = counter["n"]
+            counter["n"] += 1
+            orgs[oid] = {"id": oid, "owner": user, "name": "o"}
+            return httpx.Response(201, json=orgs[oid])
+        if req.method == "POST" and req.url.path == "/projects":
+            body = json.loads(req.content)
+            org = orgs.get(body.get("org_id"))
+            if org is None or org["owner"] != user:  # must own the parent org
+                return httpx.Response(400, json={"detail": "bad org"})
+            pid = counter["n"]
+            counter["n"] += 1
+            projects[pid] = {"id": pid, "owner": user, "org_id": body["org_id"], "name": body.get("name", "")}
+            return httpx.Response(201, json=projects[pid])
+        m = re.fullmatch(r"/projects/(\d+)", req.url.path)
+        if req.method == "GET" and m:
+            p = projects.get(int(m.group(1)))
+            return httpx.Response(200, json=p) if p else httpx.Response(404, json={})
+        return httpx.Response(404, json={})
+
+    return handler
+
+
+def test_seed_injects_parent_id_for_dependent_resource():
+    handler = _chain_handler()
+    registry = {"alice": _authed("alice", handler)}
+    guard = SafetyGuard(allow=["t"], confirm_own_target=True)
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://t", "allow": ["t"]},
+            "identities": [{"id": "alice", "auth": {"type": "bearer", "token_env": "A"}}],
+            "seeding": {"dependencies": [{"resource": "projects", "parent": "orgs", "body_field": "org_id"}]},
+        }
+    )
+    ops = _operations_from_resolved(_CHAIN_SPEC)
+
+    outcome = asyncio.run(_run_seed(cfg, registry, ops, guard))
+
+    assert outcome.failures == []
+    owned = outcome.ledger.objects_owned_by("alice")
+    org = next(e for e in owned if e.resource_type == "orgs")
+    project = next(e for e in owned if e.resource_type == "projects")
+    # the project was created under alice's org — its id was injected into the body
+    assert str(project.canonical_body["org_id"]) == org.object_id

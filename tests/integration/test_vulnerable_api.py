@@ -50,3 +50,16 @@ def test_admin_all_users_is_the_bfla_control():
     bob = {"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
     # this admin endpoint DOES check the role -> 403 for a normal user.
     assert client.get("/admin/all-users", headers=bob).status_code == 403
+
+
+def test_projects_need_an_owned_org_and_are_bola():
+    alice = {"Authorization": f"Bearer {_token('alice', 'alice-pw')}"}
+    bob = {"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
+    org = client.post("/orgs", json={"name": "o"}, headers=alice).json()
+    # a project requires a valid, owned org_id
+    assert client.post("/projects", json={"org_id": 999999, "name": "p"}, headers=alice).status_code == 400
+    project = client.post("/projects", json={"org_id": org["id"], "name": "p"}, headers=alice)
+    assert project.status_code == 201
+    # bob reads alice's project -> 200: BOLA on the chained resource.
+    got = client.get(f"/projects/{project.json()['id']}", headers=bob)
+    assert got.status_code == 200 and got.json()["owner"] == "alice"

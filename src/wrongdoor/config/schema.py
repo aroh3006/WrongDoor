@@ -89,6 +89,15 @@ class PolicyConfig(BaseModel):
     rule: Literal["owner_only"] = "owner_only"
 
 
+class DependencyConfig(BaseModel):
+    """A create-time dependency: a child resource needs a parent's id (§5.6)."""
+
+    model_config = ConfigDict(extra="forbid")
+    resource: str  # the child resource_type
+    parent: str  # the parent resource_type it is created under
+    body_field: str  # create-body field the parent object's id is injected into
+
+
 class SeedingConfig(BaseModel):
     """Seeding settings (§5.6). All optional with safe defaults."""
 
@@ -98,6 +107,8 @@ class SeedingConfig(BaseModel):
     id_field: str | None = None
     # Safety cap: never create more than this many objects in one run.
     max_objects: int = Field(default=100, ge=1)
+    # Create-order dependencies (Org -> Project -> ...).
+    dependencies: list[DependencyConfig] = Field(default_factory=list)
 
 
 class ResourceConfig(BaseModel):
