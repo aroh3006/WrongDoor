@@ -1,3 +1,6 @@
 {
-  "includeCoAuthoredBy": false
+  "attribution": {
+    "commits": false,
+    "pullRequests": false
+  }
 }
