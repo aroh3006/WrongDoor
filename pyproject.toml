@@ -18,6 +18,7 @@ dependencies = [
     "prance[osv]>=23.0",  # OpenAPI load + $ref resolution (§4); [osv] pulls the
                           # openapi-spec-validator backend prance needs. openapi-core
                           # (request validation) is deferred until a later phase needs it.
+    "jinja2>=3.1",  # self-contained HTML report (§4); autoescaping on for XSS safety
 ]
 
 # Dev-only: tests (pytest) and the throwaway toy API used as a live target in
