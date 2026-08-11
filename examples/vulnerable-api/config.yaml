@@ -1,0 +1,14 @@
+# WrongDoor config targeting the vulnerable demo API.
+# Passwords are referenced by env-var name (ALICE_PW / BOB_PW), never inline.
+target:
+  base_url: http://127.0.0.1:8000
+  allow: [127.0.0.1]
+identities:
+  - id: alice
+    attributes: {tenant: A}
+    auth: {type: login, url: /login, username: alice, password_env: ALICE_PW}
+  - id: bob
+    attributes: {tenant: B}
+    auth: {type: login, url: /login, username: bob, password_env: BOB_PW}
+policy:
+  rule: owner_only

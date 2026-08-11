@@ -1,0 +1,31 @@
+"""Confirm the demo API's KNOWN ANSWER at the HTTP level (§16): the invoices
+endpoint really has the planted BOLA, and the documents endpoint really is secure.
+If these ever flip, the golden pipeline test would be testing the wrong thing."""
+
+from fastapi.testclient import TestClient
+
+from app import app as vulnerable_app
+
+client = TestClient(vulnerable_app)
+
+
+def _token(user: str, pw: str) -> str:
+    return client.post("/login", json={"username": user, "password": pw}).json()["access_token"]
+
+
+def test_invoices_has_the_planted_bola():
+    alice = {"Authorization": f"Bearer {_token('alice', 'alice-pw')}"}
+    bob = {"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
+    inv = client.post("/invoices", json={"amount": 500.0, "memo": "secret"}, headers=alice).json()
+    # bob reads ALICE's invoice -> 200 with alice's data: the bug.
+    leaked = client.get(f"/invoices/{inv['id']}", headers=bob)
+    assert leaked.status_code == 200
+    assert leaked.json()["owner"] == "alice"
+
+
+def test_documents_is_the_secure_control():
+    alice = {"Authorization": f"Bearer {_token('alice', 'alice-pw')}"}
+    bob = {"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
+    doc = client.post("/documents", json={"title": "t", "body": "b"}, headers=alice).json()
+    # bob reads ALICE's document -> 403: the control.
+    assert client.get(f"/documents/{doc['id']}", headers=bob).status_code == 403

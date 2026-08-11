@@ -1,0 +1,72 @@
+# OpenAPI spec for the vulnerable demo API's resources (login is auth, in config).
+openapi: "3.0.0"
+info:
+  title: WrongDoor vulnerable demo API
+  version: "1.0"
+paths:
+  /invoices:
+    post:
+      operationId: createInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceIn"
+      responses:
+        "201":
+          description: created
+  /invoices/{invoice_id}:
+    get:
+      operationId: getInvoice
+      parameters:
+        - name: invoice_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
+  /documents:
+    post:
+      operationId: createDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentIn"
+      responses:
+        "201":
+          description: created
+  /documents/{document_id}:
+    get:
+      operationId: getDocument
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
+components:
+  schemas:
+    InvoiceIn:
+      type: object
+      properties:
+        amount:
+          type: number
+        memo:
+          type: string
+      required: [amount]
+    DocumentIn:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+      required: [title]

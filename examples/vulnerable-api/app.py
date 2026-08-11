@@ -1,0 +1,102 @@
+"""Deliberately-vulnerable demo API — WrongDoor's known-answer harness (§16).
+
+Two users in two tenants, and two resources built backwards from the finding:
+
+  * invoices  -- PLANTED BUG: GET /invoices/{id} authenticates but does NO
+                 ownership check, so any user can read any invoice (BOLA).
+  * documents -- CONTROL: GET /documents/{id} DOES check ownership (403 for a
+                 non-owner) and must yield ZERO findings (false-positive control).
+
+WrongDoor should report exactly one VIOLATION (the invoice BOLA) and nothing on
+documents.
+"""
+
+import secrets
+
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI(title="WrongDoor vulnerable demo API")
+
+_USERS = {
+    "alice": {"password": "alice-pw", "tenant": "A"},
+    "bob": {"password": "bob-pw", "tenant": "B"},
+}
+_TOKENS: dict[str, str] = {}
+_INVOICES: dict[int, dict] = {}
+_DOCUMENTS: dict[int, dict] = {}
+_next_id = 1000
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+class InvoiceIn(BaseModel):
+    amount: float
+    memo: str = ""
+
+
+class DocumentIn(BaseModel):
+    title: str
+    body: str = ""
+
+
+def _require_user(authorization: str | None) -> str:
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    user = _TOKENS.get(authorization.removeprefix("Bearer "))
+    if user is None:
+        raise HTTPException(status_code=401, detail="invalid token")
+    return user
+
+
+@app.post("/login")
+def login(body: LoginBody) -> dict:
+    user = _USERS.get(body.username)
+    if user is None or not secrets.compare_digest(body.password, user["password"]):
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    token = secrets.token_urlsafe(16)
+    _TOKENS[token] = body.username
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@app.post("/invoices", status_code=201)
+def create_invoice(body: InvoiceIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_user(authorization)
+    inv = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "amount": body.amount, "memo": body.memo}
+    _INVOICES[_next_id] = inv
+    _next_id += 1
+    return inv
+
+
+@app.get("/invoices/{invoice_id}")
+def get_invoice(invoice_id: int, authorization: str | None = Header(default=None)) -> dict:
+    _require_user(authorization)  # authenticated, but NO ownership check -> BOLA
+    inv = _INVOICES.get(invoice_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return inv  # returns ANY user's invoice -- the planted bug
+
+
+@app.post("/documents", status_code=201)
+def create_document(body: DocumentIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_user(authorization)
+    doc = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "title": body.title, "body": body.body}
+    _DOCUMENTS[_next_id] = doc
+    _next_id += 1
+    return doc
+
+
+@app.get("/documents/{document_id}")
+def get_document(document_id: int, authorization: str | None = Header(default=None)) -> dict:
+    user = _require_user(authorization)
+    doc = _DOCUMENTS.get(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if doc["owner"] != user:  # CORRECT ownership check -- the false-positive control
+        raise HTTPException(status_code=403, detail="forbidden")
+    return doc

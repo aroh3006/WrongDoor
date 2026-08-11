@@ -8,6 +8,8 @@ default.
 import sys
 from pathlib import Path
 
-_SCRATCH = Path(__file__).resolve().parent.parent / "examples" / "scratch"
-if str(_SCRATCH) not in sys.path:
-    sys.path.insert(0, str(_SCRATCH))
+_EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+for _sub in ("scratch", "vulnerable-api"):
+    _path = str(_EXAMPLES / _sub)
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
