@@ -8,6 +8,8 @@ Exit codes (so CI can distinguish failure modes later):
 """
 
 import asyncio
+import contextlib
+import sys
 from pathlib import Path
 
 import typer
@@ -45,8 +47,13 @@ _err = Console(stderr=True)
 
 @app.callback()
 def _startup() -> None:
-    """Runs before any subcommand — print the banner."""
-    print_banner(__version__)
+    """Runs before any subcommand — print the banner to stderr.
+
+    The banner is decorative, so it goes to stderr; stdout stays clean for
+    machine output (e.g. `wrongdoor run --format json | jq`).
+    """
+    with contextlib.redirect_stdout(sys.stderr):
+        print_banner(__version__)
 
 
 @app.command("auth-check")
