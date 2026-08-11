@@ -100,6 +100,13 @@ class SeedingConfig(BaseModel):
     max_objects: int = Field(default=100, ge=1)
 
 
+class ResourceConfig(BaseModel):
+    """Per-resource risk inputs (§9). Drives deterministic severity scoring."""
+
+    model_config = ConfigDict(extra="forbid")
+    sensitivity: Literal["low", "medium", "high"] = "medium"
+
+
 class Config(BaseModel):
     """The whole validated configuration."""
 
@@ -108,6 +115,9 @@ class Config(BaseModel):
     identities: list[IdentityConfig] = Field(min_length=1, max_length=MAX_IDENTITIES)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     seeding: SeedingConfig = Field(default_factory=SeedingConfig)
+    # Optional per-resource risk inputs, keyed by resource_type. Defaults to
+    # medium sensitivity for any resource not listed.
+    resources: dict[str, ResourceConfig] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _identity_ids_unique(self) -> "Config":
