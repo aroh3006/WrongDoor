@@ -21,6 +21,9 @@ jobs:
     # flags the planted BOLA. With --fail-on this exit-1 is exactly the red check
     # a consumer sees when a BOLA is present.
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # required to upload SARIF to the Security tab
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,8 +57,29 @@ jobs:
           test "$code" = "1" || { echo "expected exit 1 (BOLA found), got $code"; exit 1; }
           echo "WrongDoor correctly flagged the planted BOLA (exit 1)."
 
+      - name: Generate the HTML report (artifact)
+        if: always()
+        env:
+          ALICE_PW: alice-pw
+          BOB_PW: bob-pw
+        run: |
+          wrongdoor run \
+            -c examples/vulnerable-api/config.yaml \
+            -s examples/vulnerable-api/openapi.yaml \
+            --confirm-own-target --format html --output wrongdoor-report.html || true
+
       - name: Upload SARIF to the Security tab
         if: always()
+        continue-on-error: true   # best-effort; the tool check above is what gates CI
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: wrongdoor.sarif
+
+      - name: Upload reports as build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrongdoor-reports
+          path: |
+            wrongdoor.sarif
+            wrongdoor-report.html
