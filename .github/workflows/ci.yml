@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  dogfood:
+    # Run WrongDoor against its own deliberately-vulnerable demo and prove it
+    # flags the planted BOLA. With --fail-on this exit-1 is exactly the red check
+    # a consumer sees when a BOLA is present.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+
+      - name: Start the vulnerable demo API
+        working-directory: examples/vulnerable-api
+        run: nohup python -m uvicorn app:app --host 127.0.0.1 --port 8000 >/tmp/demo.log 2>&1 &
+
+      - name: Wait for the demo to be ready
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/openapi.json >/dev/null && exit 0 || sleep 1
+          done
+          echo "demo did not start"; cat /tmp/demo.log; exit 1
+
+      - name: Run WrongDoor — it must flag the planted BOLA
+        env:
+          ALICE_PW: alice-pw
+          BOB_PW: bob-pw
+        run: |
+          set +e
+          wrongdoor run \
+            -c examples/vulnerable-api/config.yaml \
+            -s examples/vulnerable-api/openapi.yaml \
+            --confirm-own-target --format sarif --output wrongdoor.sarif --fail-on high
+          code=$?
+          set -e
+          test "$code" = "1" || { echo "expected exit 1 (BOLA found), got $code"; exit 1; }
+          echo "WrongDoor correctly flagged the planted BOLA (exit 1)."
+
+      - name: Upload SARIF to the Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: wrongdoor.sarif

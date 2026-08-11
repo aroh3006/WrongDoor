@@ -1,0 +1,41 @@
+name: "WrongDoor"
+description: "Dynamic authorization (BOLA/IDOR) tester — fail the build on a confirmed leak."
+author: "aroh3006"
+branding:
+  icon: "shield"
+  color: "red"
+inputs:
+  config:
+    description: "Path to config.yaml"
+    required: true
+  spec:
+    description: "Path to the OpenAPI spec"
+    required: true
+  fail-on:
+    description: "Fail (non-zero exit) if any finding is at or above this severity"
+    required: false
+    default: "high"
+  format:
+    description: "Report format (terminal | json | sarif | junit | html)"
+    required: false
+    default: "sarif"
+  output:
+    description: "Path to write the report"
+    required: false
+    default: "wrongdoor.sarif"
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - "run"
+    - "-c"
+    - "${{ inputs.config }}"
+    - "-s"
+    - "${{ inputs.spec }}"
+    - "--confirm-own-target"
+    - "--fail-on"
+    - "${{ inputs.fail-on }}"
+    - "--format"
+    - "${{ inputs.format }}"
+    - "--output"
+    - "${{ inputs.output }}"
