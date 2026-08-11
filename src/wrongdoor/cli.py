@@ -25,6 +25,7 @@ from .engine.seeder import seed as seed_objects
 from .engine.verdict import Judgment, judge_all
 from .identity.base import AuthError
 from .identity.manager import aclose_all, authenticate_identities
+from .lint.sanity import lint
 from .report import html, json_report, junit, sarif, terminal
 from .report.finding import build_findings, max_severity
 from .risk import parse_severity
@@ -95,6 +96,37 @@ async def _run(cfg: Config, guard: SafetyGuard, probe: str) -> None:
 def _short(text: str, limit: int = 200) -> str:
     text = " ".join(text.split())
     return text if len(text) <= limit else text[:limit] + "…"
+
+
+@app.command("lint")
+def lint_cmd(
+    config: Path = typer.Option(..., "--config", "-c", help="Path to config.yaml"),
+    spec: Path = typer.Option(None, "--spec", "-s", help="Optional OpenAPI spec for deeper checks"),
+) -> None:
+    """Offline sanity check of the config (and optionally the spec). Sends no requests."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as e:
+        _err.print(f"[red]config error:[/red] {e}")
+        raise typer.Exit(code=2)
+
+    operations = None
+    if spec is not None:
+        try:
+            operations = load_operations(spec)
+        except SpecError as e:
+            _err.print(f"[red]spec error:[/red] {e}")
+            raise typer.Exit(code=5)
+
+    report = lint(cfg, operations)
+    for warning in report.warnings:
+        _out.print(f"[yellow]warning:[/yellow] {warning}")
+    for error in report.errors:
+        _err.print(f"[red]error:[/red] {error}")
+    if report.ok:
+        _out.print("[green]lint: ok[/green]")
+        return
+    raise typer.Exit(code=1)
 
 
 @app.command("seed")
