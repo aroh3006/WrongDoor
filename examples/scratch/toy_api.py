@@ -57,3 +57,46 @@ def me(authorization: str | None = Header(default=None)) -> dict:
         raise HTTPException(status_code=401, detail="invalid token")
     user = _USERS[username]
     return {"username": username, "email": user["email"], "tenant": user["tenant"]}
+
+
+# --- invoices: a resource to seed (Phase 2) --------------------------------
+# Correctly authorized (NO planted bug) -- an invoice is owned by its creator and
+# only the owner may read it. The deliberately-vulnerable version lives in the
+# Phase 3 examples/vulnerable-api/, not here.
+_INVOICES: dict[int, dict] = {}
+_next_invoice_id = 1000
+
+
+class InvoiceIn(BaseModel):
+    amount: float
+    memo: str = ""
+
+
+def _require_user(authorization: str | None) -> str:
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    username = _TOKENS.get(authorization.removeprefix("Bearer "))
+    if username is None:
+        raise HTTPException(status_code=401, detail="invalid token")
+    return username
+
+
+@app.post("/invoices", status_code=201)
+def create_invoice(body: InvoiceIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_invoice_id
+    user = _require_user(authorization)
+    invoice = {"id": _next_invoice_id, "owner": user, "amount": body.amount, "memo": body.memo}
+    _INVOICES[_next_invoice_id] = invoice
+    _next_invoice_id += 1
+    return invoice
+
+
+@app.get("/invoices/{invoice_id}")
+def get_invoice(invoice_id: int, authorization: str | None = Header(default=None)) -> dict:
+    user = _require_user(authorization)
+    invoice = _INVOICES.get(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if invoice["owner"] != user:
+        raise HTTPException(status_code=403, detail="forbidden")  # correct authz
+    return invoice

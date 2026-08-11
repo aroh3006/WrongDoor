@@ -89,6 +89,17 @@ class PolicyConfig(BaseModel):
     rule: Literal["owner_only"] = "owner_only"
 
 
+class SeedingConfig(BaseModel):
+    """Seeding settings (§5.6). All optional with safe defaults."""
+
+    model_config = ConfigDict(extra="forbid")
+    # JSON field holding the created object's id. None => the seeder tries "id"
+    # then falls back to the Location header.
+    id_field: str | None = None
+    # Safety cap: never create more than this many objects in one run.
+    max_objects: int = Field(default=100, ge=1)
+
+
 class Config(BaseModel):
     """The whole validated configuration."""
 
@@ -96,6 +107,7 @@ class Config(BaseModel):
     target: TargetConfig
     identities: list[IdentityConfig] = Field(min_length=1, max_length=MAX_IDENTITIES)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
+    seeding: SeedingConfig = Field(default_factory=SeedingConfig)
 
     @model_validator(mode="after")
     def _identity_ids_unique(self) -> "Config":

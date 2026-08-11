@@ -117,3 +117,12 @@ def test_loader_invalid_yaml(tmp_path):
     p.write_text("target: [unclosed\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+def test_seeding_defaults_and_override():
+    cfg = Config.model_validate(_valid_dict())
+    assert cfg.seeding.max_objects == 100 and cfg.seeding.id_field is None
+    d = _valid_dict()
+    d["seeding"] = {"id_field": "invoice_id", "max_objects": 5}
+    cfg2 = Config.model_validate(d)
+    assert cfg2.seeding.id_field == "invoice_id" and cfg2.seeding.max_objects == 5
