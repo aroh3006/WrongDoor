@@ -15,6 +15,9 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.7",
     "pyyaml>=6.0",
+    "prance[osv]>=23.0",  # OpenAPI load + $ref resolution (§4); [osv] pulls the
+                          # openapi-spec-validator backend prance needs. openapi-core
+                          # (request validation) is deferred until a later phase needs it.
 ]
 
 # Dev-only: tests (pytest) and the throwaway toy API used as a live target in
