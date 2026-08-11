@@ -12,3 +12,6 @@ identities:
     auth: {type: login, url: /login, username: bob, password_env: BOB_PW}
 policy:
   rule: owner_only
+resources:
+  invoices: {sensitivity: high}    # financial data -> cross-tenant leak scores Critical
+  documents: {sensitivity: low}

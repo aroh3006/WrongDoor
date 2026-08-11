@@ -8,12 +8,10 @@ Exit codes (so CI can distinguish failure modes later):
 """
 
 import asyncio
-from collections import Counter
 from pathlib import Path
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 
 from . import __version__
@@ -24,9 +22,12 @@ from .engine.executor import execute
 from .engine.planner import plan_matrix
 from .engine.seeder import SeedOutcome
 from .engine.seeder import seed as seed_objects
-from .engine.verdict import Judgment, Verdict, findings, judge_all
+from .engine.verdict import Judgment, judge_all
 from .identity.base import AuthError
 from .identity.manager import aclose_all, authenticate_identities
+from .report import html, json_report, junit, sarif, terminal
+from .report.finding import build_findings, max_severity
+from .risk import parse_severity
 from .safety.guard import SafetyError, SafetyGuard
 from .spec.openapi import (
     Operation,
@@ -165,6 +166,12 @@ def run_cmd(
     include_mutations: bool = typer.Option(
         False, "--include-mutations", help="Also test PUT/PATCH/DELETE (writes to the target!)"
     ),
+    report_format: str = typer.Option("terminal", "--format", "-f", help="terminal | json | sarif | junit | html"),
+    output: Path = typer.Option(None, "--output", "-o", help="Write the report to a file (machine formats)"),
+    fail_on: str = typer.Option("low", "--fail-on", help="Exit non-zero if any finding is >= this severity"),
+    include_bodies: bool = typer.Option(
+        False, "--include-bodies", help="Include response bodies (sensitive) in the report"
+    ),
 ) -> None:
     """Full pipeline: authenticate, seed, sweep cross-identity access, and report findings."""
     try:
@@ -182,6 +189,12 @@ def run_cmd(
         _print_dry_run(cfg, operations)  # offline: no auth, no seed, no requests
         return
 
+    try:
+        threshold = parse_severity(fail_on)
+    except ValueError as e:
+        _err.print(f"[red]bad --fail-on:[/red] {e}")
+        raise typer.Exit(code=2)
+
     guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=confirm_own_target)
     try:
         judgments = asyncio.run(
@@ -194,8 +207,12 @@ def run_cmd(
         _err.print(f"[red]auth failed:[/red] {e}")
         raise typer.Exit(code=4)
 
-    if _print_findings(judgments):
-        raise typer.Exit(code=1)  # confirmed findings -> non-zero exit for CI
+    finding_list = build_findings(judgments, cfg)
+    _emit_report(report_format, finding_list, judgments, output, include_bodies, spec)
+
+    top = max_severity(finding_list)
+    if top is not None and top >= threshold:
+        raise typer.Exit(code=1)  # a finding at/above --fail-on -> fail CI
 
 
 async def _run_pipeline(
@@ -234,27 +251,31 @@ def _print_dry_run(cfg: Config, operations: list[Operation]) -> None:
     _out.print(f"would sweep (access-ops): {accesses}")
 
 
-def _print_findings(judgments: list[Judgment]) -> list[Judgment]:
-    counts = Counter(j.verdict for j in judgments)
-    _out.print(
-        f"\nchecks: {len(judgments)}   "
-        f"[red]violations={counts[Verdict.VIOLATION]}[/red]   "
-        f"pass={counts[Verdict.PASS]}   broken={counts[Verdict.BROKEN]}   "
-        f"inconclusive={counts[Verdict.INCONCLUSIVE]}\n"
-    )
-    found = findings(judgments)
-    for j in found:
-        r = j.request
-        lines = [
-            f"actor:      {r.acting_identity}",
-            f"victim:     {j.owner} owns {r.target.resource_type}/{r.target.object_id}",
-            f"operation:  {r.method} {r.operation_id}",
-            "",
-            "reproducible request pair:",
-            f"  canonical: {r.method} {r.path}  as {j.owner}   -> 200",
-            f"  attack:    {r.method} {r.path}  as {r.acting_identity}   -> {j.observed.status}",
-            "",
-            f"body match: {', '.join(j.matched_fields)}",
-        ]
-        _out.print(Panel("\n".join(lines), title=f"VIOLATION · BOLA · {r.operation_id}", border_style="red"))
-    return found
+def _emit_report(
+    report_format: str,
+    finding_list: list,
+    judgments: list[Judgment],
+    output: Path | None,
+    include_bodies: bool,
+    spec_path: Path,
+) -> None:
+    if report_format == "terminal":
+        terminal.render(_out, judgments, finding_list)
+        return
+    if report_format == "json":
+        text = json_report.render(finding_list, include_bodies=include_bodies)
+    elif report_format == "sarif":
+        text = sarif.render(finding_list, spec_uri=str(spec_path))
+    elif report_format == "junit":
+        text = junit.render(finding_list, total_checks=len(judgments))
+    elif report_format == "html":
+        text = html.render(finding_list, include_bodies=include_bodies)
+    else:
+        _err.print(f"[red]unknown --format:[/red] {report_format} (use terminal|json|sarif|junit|html)")
+        raise typer.Exit(code=2)
+
+    if output is not None:
+        Path(output).write_text(text, encoding="utf-8")
+        _out.print(f"wrote {report_format} report to {output}")
+    else:
+        print(text)  # raw stdout so machine output stays valid

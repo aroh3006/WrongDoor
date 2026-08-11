@@ -47,3 +47,32 @@ def test_run_reports_exactly_the_planted_bola(monkeypatch):
     docs = [j for j in judgments if j.request.target.resource_type == "documents"]
     assert len(docs) == 2
     assert all(j.verdict is Verdict.PASS for j in docs)
+
+
+def test_golden_findings_render_in_all_formats(monkeypatch):
+    import json as _json
+
+    from wrongdoor.report import html, json_report, junit, sarif
+    from wrongdoor.report.finding import build_findings
+    from wrongdoor.risk import Severity
+
+    monkeypatch.setenv("ALICE_PW", "alice-pw")
+    monkeypatch.setenv("BOB_PW", "bob-pw")
+    cfg = load_config(_VULN / "config.yaml")
+    ops = load_operations(_VULN / "openapi.yaml")
+    guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=True)
+    transport = httpx.ASGITransport(app=vulnerable_app)
+
+    judgments = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
+    fs = build_findings(judgments, cfg)
+    assert len(fs) == 2
+    assert all(f.severity is Severity.CRITICAL for f in fs)  # high + cross-tenant
+
+    doc = _json.loads(json_report.render(fs))
+    assert doc["summary"]["by_severity"]["CRITICAL"] == 2
+
+    s = _json.loads(sarif.render(fs, spec_uri="examples/vulnerable-api/openapi.yaml"))
+    assert len(s["runs"][0]["results"]) == 2 and s["runs"][0]["results"][0]["level"] == "error"
+
+    assert 'failures="2"' in junit.render(fs, total_checks=len(judgments))
+    assert "WrongDoor Report" in html.render(fs) and "getInvoice" in html.render(fs)
