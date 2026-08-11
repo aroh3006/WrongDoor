@@ -57,6 +57,9 @@ def score(
     if judgment.request.check == "unauth":
         band = _bump(band)  # exposed to any anonymous caller — worse than a cross-identity leak
 
+    if judgment.request.check == "bfla":
+        band = _bump(band)  # a privileged function reachable by the under-privileged
+
     return band
 
 

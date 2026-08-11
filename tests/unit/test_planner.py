@@ -70,6 +70,21 @@ def test_include_unauth_adds_anonymous_read_rows():
     assert any(p.check == "bola" for p in planned)  # BOLA rows still present
 
 
+def test_plan_bfla_tests_only_under_privileged_identities():
+    from wrongdoor.config.schema import OperationConfig
+    from wrongdoor.engine.planner import plan_bfla
+
+    spec = {"paths": {"/admin/all-invoices": {"get": {"operationId": "getAllInvoices", "responses": {}}}}}
+    ops = _operations_from_resolved(spec)
+    rows = plan_bfla(
+        ops,
+        {"alice": {}, "bob": {"role": "admin"}},  # bob legitimately holds the role
+        {"getAllInvoices": OperationConfig(privileged=True, requires_role="admin")},
+    )
+    assert [r.acting_identity for r in rows] == ["alice"]  # only the non-admin is tested
+    assert rows[0].check == "bfla" and rows[0].path == "/admin/all-invoices"
+
+
 def test_no_plans_when_resource_type_has_no_access_ops():
     # ledger has invoices, but the only op is for documents -> nothing to plan
     spec = {

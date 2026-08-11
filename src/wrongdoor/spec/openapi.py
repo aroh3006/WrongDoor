@@ -93,8 +93,6 @@ def _operations_from_resolved(spec: dict) -> list[Operation]:
             params = _collect_params(path_item, op)
             has_path_id = any(p.is_object_id for p in params)
             kind = _classify(method, has_path_id)
-            if kind is None:
-                continue  # not a create/access op we care about
             operations.append(
                 Operation(
                     operation_id=op.get("operationId") or f"{method.upper()} {path}",
@@ -109,12 +107,12 @@ def _operations_from_resolved(spec: dict) -> list[Operation]:
     return operations
 
 
-def _classify(method: str, has_path_id: bool) -> str | None:
+def _classify(method: str, has_path_id: bool) -> str:
     if method == "post" and not has_path_id:
         return "create"  # POST /invoices -> makes a new object
     if method in ("get", "put", "patch", "delete") and has_path_id:
         return "access"  # GET/PUT/DELETE /invoices/{id} -> touches an existing object
-    return None
+    return "other"  # e.g. an admin/collection endpoint — inert unless marked privileged
 
 
 def _resource_type(path: str) -> str:

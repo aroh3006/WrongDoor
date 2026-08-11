@@ -35,18 +35,20 @@ def test_run_reports_exactly_the_planted_bola(monkeypatch):
     judgments = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
     found = findings(judgments)
 
-    # Known answer: BOLA on invoices AND notes (both lack ownership checks), plus
-    # MISSING_AUTH on notes (its GET requires no token). 6 confirmed in all.
-    assert len(found) == 6
-    assert Counter(f.request.check for f in found) == {"bola": 4, "unauth": 2}
+    # Known answer: BOLA on invoices AND notes, MISSING_AUTH on notes, and BFLA on
+    # the unprotected admin endpoint. 8 confirmed in all.
+    assert len(found) == 8
+    assert Counter(f.request.check for f in found) == {"bola": 4, "unauth": 2, "bfla": 2}
     bola_resources = Counter(f.request.target.resource_type for f in found if f.request.check == "bola")
     assert bola_resources == {"invoices": 2, "notes": 2}
     assert {f.request.target.resource_type for f in found if f.request.check == "unauth"} == {"notes"}
+    assert {f.request.operation_id for f in found if f.request.check == "bfla"} == {"getAllInvoices"}
 
-    # The documents control was swept (BOLA + unauth) and produced ZERO findings.
+    # Controls swept, ZERO findings: documents (BOLA/unauth) and getAllUsers (BFLA).
     docs = [j for j in judgments if j.request.target.resource_type == "documents"]
-    assert len(docs) == 4
-    assert all(j.verdict is Verdict.PASS for j in docs)
+    assert len(docs) == 4 and all(j.verdict is Verdict.PASS for j in docs)
+    admin_control = [j for j in judgments if j.request.operation_id == "getAllUsers"]
+    assert len(admin_control) == 2 and all(j.verdict is Verdict.PASS for j in admin_control)
 
 
 def test_golden_findings_render_in_all_formats(monkeypatch):
@@ -65,15 +67,15 @@ def test_golden_findings_render_in_all_formats(monkeypatch):
 
     judgments = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
     fs = build_findings(judgments, cfg)
-    assert len(fs) == 6
-    assert Counter(f.finding_type for f in fs) == {"BOLA": 4, "MISSING_AUTH": 2}
-    assert Counter(f.severity.name for f in fs) == {"CRITICAL": 2, "HIGH": 4}
+    assert len(fs) == 8
+    assert Counter(f.finding_type for f in fs) == {"BOLA": 4, "MISSING_AUTH": 2, "BFLA": 2}
+    assert Counter(f.severity.name for f in fs) == {"CRITICAL": 2, "HIGH": 6}
 
     doc = _json.loads(json_report.render(fs))
-    assert doc["summary"]["findings"] == 6
+    assert doc["summary"]["findings"] == 8
 
     s = _json.loads(sarif.render(fs, spec_uri="examples/vulnerable-api/openapi.yaml"))
-    assert len(s["runs"][0]["results"]) == 6
+    assert len(s["runs"][0]["results"]) == 8
 
-    assert 'failures="6"' in junit.render(fs, total_checks=len(judgments))
-    assert "MISSING_AUTH" in html.render(fs) and "getNote" in html.render(fs)
+    assert 'failures="8"' in junit.render(fs, total_checks=len(judgments))
+    assert "BFLA" in html.render(fs) and "getAllInvoices" in html.render(fs)

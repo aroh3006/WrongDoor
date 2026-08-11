@@ -19,7 +19,7 @@ from .banner import print_banner
 from .config.loader import ConfigError, load_config
 from .config.schema import Config
 from .engine.executor import execute
-from .engine.planner import ANONYMOUS_ID, plan_matrix
+from .engine.planner import ANONYMOUS_ID, plan_bfla, plan_matrix
 from .engine.seeder import SeedOutcome
 from .engine.seeder import seed as seed_objects
 from .engine.verdict import Judgment, judge_all
@@ -274,6 +274,8 @@ async def _run_pipeline(
             include_mutations=include_mutations,
             include_unauth=include_unauth,
         )
+        identity_attrs = {i.id: dict(i.attributes) for i in cfg.identities}
+        planned += plan_bfla(operations, identity_attrs, cfg.operations)
         results = await execute(planned, registry)
         judgments = judge_all(results, outcome.ledger)
     finally:

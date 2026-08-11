@@ -16,3 +16,6 @@ resources:
   invoices: {sensitivity: high}    # financial data -> cross-tenant leak scores Critical
   documents: {sensitivity: low}
   notes: {sensitivity: medium}     # missing-auth read -> unauthenticated bump to High
+operations:
+  getAllInvoices: {privileged: true, requires_role: admin}   # BFLA: no role check in the app
+  getAllUsers: {privileged: true, requires_role: admin}      # control: app DOES check the role

@@ -129,3 +129,18 @@ def get_note(note_id: int) -> dict:  # NO auth parameter, NO check -> missing au
     if note is None:
         raise HTTPException(status_code=404, detail="not found")
     return note
+
+
+# --- admin endpoints: PLANTED BFLA (D2) + a secured control ------------------
+@app.get("/admin/all-invoices")
+def admin_all_invoices(authorization: str | None = Header(default=None)) -> dict:
+    _require_user(authorization)  # authenticated, but NO role check -> BFLA
+    return {"invoices": list(_INVOICES.values())}
+
+
+@app.get("/admin/all-users")
+def admin_all_users(authorization: str | None = Header(default=None)) -> dict:
+    user = _require_user(authorization)
+    if _USERS[user].get("role") != "admin":  # CORRECT role check -- the BFLA control
+        raise HTTPException(status_code=403, detail="forbidden")
+    return {"users": list(_USERS.keys())}

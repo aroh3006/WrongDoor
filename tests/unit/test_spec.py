@@ -47,14 +47,16 @@ _RESOLVED = {
 }
 
 
-def test_classifies_create_and_access_and_skips_the_rest():
+def test_classifies_create_access_and_keeps_others():
     ops = _operations_from_resolved(_RESOLVED)
     by_id = {o.operation_id: o for o in ops}
-    assert set(by_id) == {"createInvoice", "getInvoice", "deleteInvoice"}
+    assert set(by_id) == {"createInvoice", "getInvoice", "deleteInvoice", "listInvoices", "health"}
     assert by_id["createInvoice"].kind == "create"
     assert by_id["getInvoice"].kind == "access"
     assert by_id["deleteInvoice"].kind == "access"
-    assert all(o.resource_type == "invoices" for o in ops)
+    assert by_id["listInvoices"].kind == "other"  # GET collection, no path id
+    assert by_id["health"].kind == "other"
+    assert by_id["getInvoice"].resource_type == "invoices"
 
 
 def test_object_id_param_tagged():

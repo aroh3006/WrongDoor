@@ -76,6 +76,18 @@ paths:
       responses:
         "200":
           description: ok
+  /admin/all-invoices:
+    get:
+      operationId: getAllInvoices
+      responses:
+        "200":
+          description: ok
+  /admin/all-users:
+    get:
+      operationId: getAllUsers
+      responses:
+        "200":
+          description: ok
 components:
   schemas:
     InvoiceIn:

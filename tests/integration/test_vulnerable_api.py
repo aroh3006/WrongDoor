@@ -38,3 +38,15 @@ def test_notes_has_missing_authentication():
     resp = client.get(f"/notes/{note['id']}")
     assert resp.status_code == 200
     assert resp.json()["owner"] == "alice"
+
+
+def test_admin_all_invoices_has_bfla():
+    bob = {"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
+    # bob (a normal user) can hit the admin endpoint -> BFLA.
+    assert client.get("/admin/all-invoices", headers=bob).status_code == 200
+
+
+def test_admin_all_users_is_the_bfla_control():
+    bob = {"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
+    # this admin endpoint DOES check the role -> 403 for a normal user.
+    assert client.get("/admin/all-users", headers=bob).status_code == 403

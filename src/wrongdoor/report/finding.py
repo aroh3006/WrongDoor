@@ -12,8 +12,10 @@ from ..config.schema import Config
 from ..engine.planner import ANONYMOUS_ID
 from ..engine.verdict import Judgment, Verdict
 from ..explain import (
+    explain_bfla,
     explain_bola,
     explain_missing_auth,
+    remediate_bfla,
     remediate_bola,
     remediate_missing_auth,
 )
@@ -85,7 +87,14 @@ def build_findings(judgments: list[Judgment], config: Config) -> list[Finding]:
         rt, oid = req.target.resource_type, req.target.object_id
         matched = tuple(j.matched_fields)
 
-        if req.check == "unauth" or req.acting_identity == ANONYMOUS_ID:
+        if req.check == "bfla":
+            finding_type = "BFLA"
+            actor = req.acting_identity
+            actor_tenant = id_attrs.get(actor, {}).get("tenant")
+            fingerprint = f"WD-BFLA-{req.operation_id}-{rt}"
+            explanation = explain_bfla(actor, actor_tenant, req.method, req.operation_id)
+            remediation = remediate_bfla(req.method, req.operation_id)
+        elif req.check == "unauth" or req.acting_identity == ANONYMOUS_ID:
             finding_type = "MISSING_AUTH"
             actor, actor_tenant = "anonymous", None
             fingerprint = f"WD-MISSING_AUTH-{req.operation_id}-{rt}"

@@ -112,6 +112,41 @@ def plan_matrix(
     return planned
 
 
+def plan_bfla(
+    operations: list[Operation],
+    identity_attrs: dict[str, dict[str, str]],
+    operations_config: dict,
+) -> list[PlannedRequest]:
+    """BFLA (D2): call each privileged operation as every identity that lacks the
+    required role. Function-level, so these rows carry no object (target is a
+    placeholder the verdict ignores). Object-bound privileged ops are a later
+    extension; here we sweep privileged operations that take no path id."""
+    rows: list[PlannedRequest] = []
+    for op in operations:
+        cfg = operations_config.get(op.operation_id)
+        if cfg is None or not cfg.privileged:
+            continue
+        if op.object_id_params:
+            continue  # object-bound privileged ops: deferred
+        required_role = cfg.requires_role
+        for identity, attrs in identity_attrs.items():
+            if required_role is not None and attrs.get("role") == required_role:
+                continue  # this identity legitimately holds the required role
+            rows.append(
+                PlannedRequest(
+                    acting_identity=identity,
+                    method=op.method,
+                    path=op.path_template,
+                    operation_id=op.operation_id,
+                    target=ObjectRef(op.resource_type, "*"),  # no object — placeholder
+                    expected=Expectation.DENY,
+                    is_mutation=op.method in _MUTATION_METHODS,
+                    check="bfla",
+                )
+            )
+    return rows
+
+
 def _expected(policy: str, actor: str, owner: str) -> Expectation:
     # owner_only: only the owner may access; every non-owner cell we plan is DENY.
     # (Structured as a hook so tenant/role policies can return ALLOW for some cells.)

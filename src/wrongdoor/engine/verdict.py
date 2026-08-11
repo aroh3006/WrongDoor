@@ -59,10 +59,6 @@ def judge(
             matched_fields=matched,
         )
 
-    # Defensive: the planner only plans for ledger objects, but never trust it blindly.
-    if entry is None:
-        return result(Verdict.INCONCLUSIVE, "target object not in ledger")
-
     # A server error is neither a pass nor a leak, regardless of expectation.
     if 500 <= status < 600:
         return result(Verdict.INCONCLUSIVE, "server error (5xx)")
@@ -71,6 +67,24 @@ def judge(
         if 200 <= status < 300:
             return result(Verdict.PASS, "authorized access succeeded")
         return result(Verdict.BROKEN, f"legitimate access denied (HTTP {status})")
+
+    # BFLA (D2) is function-level: no object to match, judged on status alone —
+    # a non-privileged identity reaching the operation at all is the finding.
+    if request.check == "bfla":
+        if status in (401, 403):
+            return result(Verdict.PASS, "correctly denied (privileged operation)")
+        if status == 404:
+            return result(Verdict.PASS, "not found")
+        if 200 <= status < 300:
+            return result(
+                Verdict.VIOLATION,
+                "confirmed BFLA: privileged operation succeeded for a non-privileged identity",
+            )
+        return result(Verdict.INCONCLUSIVE, f"unexpected status {status}")
+
+    # BOLA (D1) / missing-auth (D3) need ground truth from the ledger.
+    if entry is None:
+        return result(Verdict.INCONCLUSIVE, "target object not in ledger")
 
     # request.expected is DENY (the actor is a non-owner / unauthorized).
     if status in (401, 403):

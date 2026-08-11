@@ -108,3 +108,30 @@ def test_unauthenticated_violation_becomes_missing_auth_finding():
     assert f.severity is Severity.HIGH  # medium sensitivity + unauthenticated bump
     assert f.fingerprint == "WD-MISSING_AUTH-getNote-notes"
     assert "unauthenticated" in f.explanation.lower()
+
+
+def test_bfla_violation_becomes_bfla_finding():
+    req = PlannedRequest(
+        acting_identity="bob",
+        method="GET",
+        path="/admin/all-invoices",
+        operation_id="getAllInvoices",
+        target=ObjectRef("all-invoices", "*"),
+        expected=Expectation.DENY,
+        is_mutation=False,
+        check="bfla",
+    )
+    j = Judgment(
+        verdict=Verdict.VIOLATION,
+        reason="x",
+        request=req,
+        observed=ObservedResponse(status=200, body={"invoices": []}),
+        owner=None,
+        matched_fields=(),
+    )
+    f = build_findings([j], _config())[0]
+    assert f.finding_type == "BFLA"
+    assert f.actor == "bob"
+    assert f.fingerprint == "WD-BFLA-getAllInvoices-all-invoices"
+    assert f.severity is Severity.HIGH  # default medium + BFLA bump
+    assert "privileged" in f.explanation.lower()

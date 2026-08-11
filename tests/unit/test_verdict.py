@@ -79,6 +79,29 @@ def test_target_not_in_ledger_is_inconclusive():
     assert judge(_req(), _obs(200, dict(_CANON)), OwnershipLedger()).verdict is Verdict.INCONCLUSIVE
 
 
+def _bfla_req():
+    return PlannedRequest(
+        acting_identity="bob",
+        method="GET",
+        path="/admin/all-invoices",
+        operation_id="getAllInvoices",
+        target=ObjectRef("all-invoices", "*"),
+        expected=Expectation.DENY,
+        is_mutation=False,
+        check="bfla",
+    )
+
+
+def test_bfla_success_is_violation_without_a_ledger_object():
+    # BFLA is status-based and needs no ledger entry.
+    j = judge(_bfla_req(), _obs(200, {"invoices": []}), OwnershipLedger())
+    assert j.verdict is Verdict.VIOLATION
+
+
+def test_bfla_denied_is_pass():
+    assert judge(_bfla_req(), _obs(403), OwnershipLedger()).verdict is Verdict.PASS
+
+
 def test_judge_all_and_findings():
     led = _ledger()
     results = [

@@ -115,6 +115,14 @@ class DetectorsConfig(BaseModel):
     unauthenticated: bool = True
 
 
+class OperationConfig(BaseModel):
+    """Per-operation overrides, keyed by operationId. Drives the BFLA (D2) sweep."""
+
+    model_config = ConfigDict(extra="forbid")
+    privileged: bool = False
+    requires_role: str | None = None  # identities with this role are allowed; others are tested
+
+
 class Config(BaseModel):
     """The whole validated configuration."""
 
@@ -127,6 +135,8 @@ class Config(BaseModel):
     # medium sensitivity for any resource not listed.
     resources: dict[str, ResourceConfig] = Field(default_factory=dict)
     detectors: DetectorsConfig = Field(default_factory=DetectorsConfig)
+    # Optional per-operation overrides, keyed by operationId (e.g. mark privileged).
+    operations: dict[str, OperationConfig] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _identity_ids_unique(self) -> "Config":

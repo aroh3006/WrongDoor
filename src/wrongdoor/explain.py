@@ -61,3 +61,18 @@ def remediate_missing_auth(resource_type: str, method: str, operation_id: str) -
         f"Require authentication on {method} {operation_id}: reject requests without a valid "
         f"token (401) before returning any {resource_type}, then enforce an ownership check."
     )
+
+
+def explain_bfla(actor: str, actor_tenant: str | None, method: str, operation_id: str) -> str:
+    who = f"identity {actor!r}" + (f" (tenant {actor_tenant})" if actor_tenant else "")
+    return (
+        f"{who} successfully invoked the privileged operation {method} {operation_id}, "
+        f"which should require elevated privileges — a Broken Function Level Authorization flaw."
+    )
+
+
+def remediate_bfla(method: str, operation_id: str) -> str:
+    return (
+        f"Enforce a role/privilege check on {method} {operation_id}: verify the caller holds the "
+        f"required role and return 403 otherwise."
+    )
