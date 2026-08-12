@@ -33,12 +33,12 @@ from .report import html, json_report, junit, sarif, terminal
 from .report.finding import build_findings, max_severity
 from .risk import parse_severity
 from .safety.guard import SafetyError, SafetyGuard
+from .spec.loader import load_operations  # dispatches .har vs OpenAPI by extension
 from .spec.openapi import (
     Operation,
     SpecError,
     access_operations,
     create_operations,
-    load_operations,
 )
 
 app = typer.Typer(add_completion=False, help="WrongDoor — dynamic authorization tester.")
@@ -109,7 +109,7 @@ def _short(text: str, limit: int = 200) -> str:
 @app.command("lint")
 def lint_cmd(
     config: Path = typer.Option(..., "--config", "-c", help="Path to config.yaml"),
-    spec: Path = typer.Option(None, "--spec", "-s", help="Optional OpenAPI spec for deeper checks"),
+    spec: Path = typer.Option(None, "--spec", "-s", help="Optional OpenAPI spec or .har capture for deeper checks"),
 ) -> None:
     """Offline sanity check of the config (and optionally the spec). Sends no requests."""
     try:
@@ -140,7 +140,7 @@ def lint_cmd(
 @app.command("seed")
 def seed_cmd(
     config: Path = typer.Option(..., "--config", "-c", help="Path to config.yaml"),
-    spec: Path = typer.Option(..., "--spec", "-s", help="Path to the OpenAPI spec"),
+    spec: Path = typer.Option(..., "--spec", "-s", help="Path to the OpenAPI spec or a .har capture"),
     confirm_own_target: bool = typer.Option(
         False,
         "--confirm-own-target",
@@ -213,7 +213,7 @@ def _print_cleanup(outcome: CleanupOutcome) -> None:
 @app.command("run")
 def run_cmd(
     config: Path = typer.Option(..., "--config", "-c", help="Path to config.yaml"),
-    spec: Path = typer.Option(..., "--spec", "-s", help="Path to the OpenAPI spec"),
+    spec: Path = typer.Option(..., "--spec", "-s", help="Path to the OpenAPI spec or a .har capture"),
     confirm_own_target: bool = typer.Option(
         False, "--confirm-own-target", help="Confirm you own / are authorized to test this target"
     ),

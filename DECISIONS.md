@@ -104,6 +104,20 @@ N/M; left behind […]" summary, reports resources with no DELETE op instead of
 guessing a URL, and never changes the run's exit code — a teardown hiccup must
 not mask or fake the security result.
 
+### HAR import reuses the OpenAPI catalog, and never touches auth
+A HAR capture is a second front-end that emits the *same* `Operation` list as the
+OpenAPI importer — it reuses that importer's `Operation`/`Parameter` types and its
+`_classify`/`_resource_type` helpers, so planner/seeder/executor/verdict stay
+importer-agnostic (a `.har` and a spec are interchangeable at `--spec`, dispatched
+by extension). The one inference not in the data — literal `/invoices/1000` vs
+`/invoices/1001` being one templated op — is done by id-shape (digits / UUID /
+long hex → `{param}`), then handed to the same `_classify`. Recorded create
+bodies become `request_schema={"example": body}`, which `synthesize_body` already
+replays, so the seeder needs no change. Auth is deliberately NOT extracted from a
+HAR: recorded credentials are secrets and usually stale, but decisively a HAR
+captures only ONE identity while the differential method needs two or more — so
+auth stays config-based and recorded Authorization/Cookie headers are ignored.
+
 ### prance for spec parsing; openapi-core deferred
 `$ref` resolution is a solved, subtle problem — we don't reimplement it. openapi-core
 (request/response *validation*) isn't needed yet, so it's held until a phase does.
