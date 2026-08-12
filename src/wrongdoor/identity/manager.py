@@ -9,8 +9,14 @@ import asyncio
 
 import httpx
 
-from ..config.schema import BearerAuthConfig, Config, LoginAuthConfig
+from ..config.schema import (
+    ApiKeyAuthConfig,
+    BearerAuthConfig,
+    Config,
+    LoginAuthConfig,
+)
 from ..safety.guard import SafetyGuard
+from .apikey import ApiKeyAuth
 from .base import AuthedClient, AuthError, AuthPlugin
 from .bearer import BearerAuth
 from .cookie import LoginAuth
@@ -24,6 +30,8 @@ def _build_plugin(auth) -> AuthPlugin:
         return BearerAuth.from_config(auth)
     if isinstance(auth, LoginAuthConfig):
         return LoginAuth.from_config(auth)
+    if isinstance(auth, ApiKeyAuthConfig):
+        return ApiKeyAuth.from_config(auth)
     raise AuthError(f"unsupported auth type: {getattr(auth, 'type', auth)!r}")
 
 
@@ -50,8 +58,14 @@ async def authenticate_identities(
         except BaseException:
             await client.aclose()  # don't leak the socket on failure
             raise
+        # Record any custom secret header this plugin set (e.g. api-key) so it
+        # travels with the client and diagnostics redact the CONFIGURED header.
+        sensitive = frozenset(getattr(plugin, "sensitive_headers", frozenset()))
         return AuthedClient(
-            identity_id=identity.id, client=client, attributes=dict(identity.attributes)
+            identity_id=identity.id,
+            client=client,
+            attributes=dict(identity.attributes),
+            sensitive_headers=sensitive,
         )
 
     results = await asyncio.gather(

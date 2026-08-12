@@ -10,7 +10,8 @@ import json
 import httpx
 import pytest
 
-from wrongdoor.config.schema import BearerAuthConfig, Config
+from wrongdoor.config.schema import ApiKeyAuthConfig, BearerAuthConfig, Config
+from wrongdoor.identity.apikey import ApiKeyAuth
 from wrongdoor.identity.base import AuthError, redacted, resolve_secret
 from wrongdoor.identity.bearer import BearerAuth
 from wrongdoor.identity.cookie import LoginAuth
@@ -43,6 +44,55 @@ def test_redacted_masks_sensitive():
     assert out["Authorization"] == "<redacted>"
     assert out["Cookie"] == "<redacted>"
     assert out["Accept"] == "application/json"
+
+
+def test_redacted_masks_configured_extra_header_case_insensitively():
+    # A custom (non-default) secret header is masked only when threaded through.
+    headers = {"X-Company-Token": "sekret", "Accept": "application/json"}
+    assert redacted(headers)["X-Company-Token"] == "sekret"  # not a default -> visible
+    out = redacted(headers, extra_sensitive={"x-company-token"})
+    assert out["X-Company-Token"] == "<redacted>"  # configured header masked
+    assert out["Accept"] == "application/json"
+
+
+# --- api key ---------------------------------------------------------------
+def test_api_key_sets_configured_header_and_reports_it_sensitive():
+    plugin = ApiKeyAuth(key="k3y", header="X-API-Key")
+    assert plugin.sensitive_headers == frozenset({"x-api-key"})  # lowercased
+
+    def handler(req):
+        return httpx.Response(200, json={"key": req.headers.get("x-api-key")})
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)
+            return (await c.get("/x")).json()["key"]
+
+    assert asyncio.run(run()) == "k3y"
+
+
+def test_api_key_from_config_resolves_env_and_custom_header(monkeypatch):
+    monkeypatch.setenv("WIDGET_KEY", "alice-key")
+    plugin = ApiKeyAuth.from_config(
+        ApiKeyAuthConfig(type="api_key", key_env="WIDGET_KEY", header="X-Company-Token")
+    )
+    assert plugin.sensitive_headers == frozenset({"x-company-token"})
+
+    def handler(req):
+        return httpx.Response(200, json={"key": req.headers.get("x-company-token")})
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)
+            return (await c.get("/x")).json()["key"]
+
+    assert asyncio.run(run()) == "alice-key"
+
+
+def test_api_key_from_config_missing_env_raises(monkeypatch):
+    monkeypatch.delenv("NO_SUCH_KEY", raising=False)
+    with pytest.raises(AuthError):
+        ApiKeyAuth.from_config(ApiKeyAuthConfig(type="api_key", key_env="NO_SUCH_KEY"))
 
 
 # --- bearer ----------------------------------------------------------------
@@ -208,3 +258,33 @@ def test_manager_refuses_when_guard_denies(monkeypatch):
         asyncio.run(
             authenticate_identities(cfg, guard, transport=httpx.MockTransport(_toy_handler()))
         )
+
+
+def test_manager_records_api_key_sensitive_header(monkeypatch):
+    monkeypatch.setenv("ALICE_KEY", "alice-key")
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://t", "allow": ["t"]},
+            "identities": [
+                {"id": "alice", "auth": {"type": "api_key", "key_env": "ALICE_KEY", "header": "X-API-Key"}}
+            ],
+        }
+    )
+    guard = SafetyGuard(allow=["t"], confirm_own_target=True)
+
+    def handler(req):
+        return httpx.Response(200, json={"key": req.headers.get("x-api-key")})
+
+    async def run():
+        reg = await authenticate_identities(cfg, guard, transport=httpx.MockTransport(handler))
+        try:
+            sent = (await reg["alice"].client.get("/x")).json()["key"]
+            return sent, reg["alice"].sensitive_headers
+        finally:
+            await aclose_all(reg)
+
+    sent, sensitive = asyncio.run(run())
+    assert sent == "alice-key"  # the key rode in the configured header
+    # The configured header travels with the client, so diagnostics can redact it.
+    assert sensitive == frozenset({"x-api-key"})
+    assert redacted({"X-API-Key": "alice-key"}, sensitive)["X-API-Key"] == "<redacted>"

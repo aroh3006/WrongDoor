@@ -10,7 +10,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Mapping
 
-from ..config.schema import BearerAuthConfig, Config, LoginAuthConfig
+from ..config.schema import (
+    ApiKeyAuthConfig,
+    BearerAuthConfig,
+    Config,
+    LoginAuthConfig,
+)
 from ..safety.guard import SafetyError, SafetyGuard
 from ..spec.openapi import Operation, access_operations, create_operations
 
@@ -57,6 +62,8 @@ def _secret_vars(auth) -> list[str]:
         return [auth.token_env]
     if isinstance(auth, LoginAuthConfig):
         return [auth.password_env]
+    if isinstance(auth, ApiKeyAuthConfig):
+        return [auth.key_env]
     return []
 
 

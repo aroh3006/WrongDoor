@@ -216,6 +216,44 @@ def get_project(project_id: int, authorization: str | None = Header(default=None
     return project
 
 
+# --- widgets: API-KEY-authenticated resource (exercises the api_key auth type) --
+# Auth here is an X-API-Key header (not a bearer token / cookie), mapping the key
+# to a user. GET has NO ownership check -> BOLA, same planted-bug shape as
+# invoices but reached through a different auth method end to end.
+_WIDGET_KEYS = {"alice-key": "alice", "bob-key": "bob"}  # api key -> user
+_WIDGETS: dict[int, dict] = {}
+
+
+class WidgetIn(BaseModel):
+    name: str = ""
+
+
+def _require_key(x_api_key: str | None) -> str:
+    user = _WIDGET_KEYS.get(x_api_key or "")
+    if user is None:
+        raise HTTPException(status_code=401, detail="missing or invalid API key")
+    return user
+
+
+@app.post("/widgets", status_code=201)
+def create_widget(body: WidgetIn, x_api_key: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_key(x_api_key)
+    widget = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "name": body.name}
+    _WIDGETS[_next_id] = widget
+    _next_id += 1
+    return widget
+
+
+@app.get("/widgets/{widget_id}")
+def get_widget(widget_id: int, x_api_key: str | None = Header(default=None)) -> dict:
+    _require_key(x_api_key)  # authenticated by key, but NO ownership check -> BOLA
+    widget = _WIDGETS.get(widget_id)
+    if widget is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return widget
+
+
 @app.delete("/projects/{project_id}", status_code=204)
 def delete_project(project_id: int, authorization: str | None = Header(default=None)) -> None:
     user = _require_user(authorization)  # owner-only delete

@@ -61,6 +61,14 @@ Secrets are referenced by env-var *name* in the config and resolved only in
 `identity/`, never logged. Reports emit matched field *names*; response values
 appear only behind `--include-bodies`, and the HTML report autoescapes everything.
 
+### API-key auth is header-only, and redaction follows the configured header
+The `api_key` auth type sends the key in a header (default `X-API-Key`, but the
+header name is configurable because APIs disagree) — never a URL query string, so
+a key can't leak into a logged URL (§13). Because the header name is known at
+config time, each plugin declares the secret header it sets and that travels with
+the `AuthedClient`, so `redacted()` masks the *configured* header, not just a
+hardcoded default — redaction stays correct even for a custom header name.
+
 ### Severity is a deterministic, hand-reconstructable rubric
 `severity = f(sensitivity, cross_tenant, is_mutation, check)` — a small function of
 named factors, so a finding is "Critical because it's a cross-tenant financial GET,"

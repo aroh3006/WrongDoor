@@ -34,6 +34,18 @@ def test_missing_secret_env_is_a_warning_not_an_error():
     assert any("ALICE_PW" in w for w in report.warnings)
 
 
+def test_missing_api_key_env_is_warned():
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://127.0.0.1:8000", "allow": ["127.0.0.1"]},
+            "identities": [{"id": "alice", "auth": {"type": "api_key", "key_env": "ALICE_KEY"}}],
+        }
+    )
+    report = lint(cfg, env={})
+    assert report.ok  # still just a warning
+    assert any("ALICE_KEY" in w for w in report.warnings)
+
+
 def test_dependency_cycle_is_an_error():
     cfg = Config.model_validate(
         {

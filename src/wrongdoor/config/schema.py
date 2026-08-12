@@ -46,10 +46,23 @@ class LoginAuthConfig(BaseModel):
     token_field: str | None = None
 
 
+class ApiKeyAuthConfig(BaseModel):
+    """A pre-issued API key sent as a header. No login round-trip (like ``bearer``)."""
+
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["api_key"]
+    key_env: str = Field(min_length=1)  # NAME of the env var holding the API key
+    # Header the key rides in. Configurable because APIs disagree (X-Api-Key,
+    # Api-Key, X-Company-Token, ...). Header only — a key must never go in a URL
+    # query string (§13), so there is deliberately no query-param option.
+    header: str = Field(default="X-API-Key", min_length=1)
+
+
 # Discriminated union: Pydantic picks the variant by the `type` value, giving
 # precise "unknown auth type 'foo'" style errors instead of a confusing merge.
 AuthConfig = Annotated[
-    Union[BearerAuthConfig, LoginAuthConfig], Field(discriminator="type")
+    Union[BearerAuthConfig, LoginAuthConfig, ApiKeyAuthConfig],
+    Field(discriminator="type"),
 ]
 
 

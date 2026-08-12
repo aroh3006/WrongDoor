@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from wrongdoor.config.loader import ConfigError, load_config
 from wrongdoor.config.schema import (
     MAX_IDENTITIES,
+    ApiKeyAuthConfig,
     BearerAuthConfig,
     Config,
     LoginAuthConfig,
@@ -38,6 +39,26 @@ def test_valid_config_parses_and_discriminates_auth():
     assert isinstance(cfg.identities[0].auth, LoginAuthConfig)
     assert isinstance(cfg.identities[1].auth, BearerAuthConfig)
     assert cfg.policy.rule == "owner_only"  # default applied
+
+
+def test_api_key_auth_parses_with_default_and_custom_header():
+    d = _valid_dict()
+    d["identities"][1]["auth"] = {"type": "api_key", "key_env": "BOB_KEY"}
+    cfg = Config.model_validate(d)
+    auth = cfg.identities[1].auth
+    assert isinstance(auth, ApiKeyAuthConfig)
+    assert auth.key_env == "BOB_KEY" and auth.header == "X-API-Key"  # default header
+
+    d["identities"][1]["auth"]["header"] = "X-Company-Token"
+    cfg2 = Config.model_validate(d)
+    assert cfg2.identities[1].auth.header == "X-Company-Token"
+
+
+def test_api_key_inline_key_rejected():
+    d = _valid_dict()
+    d["identities"][1]["auth"] = {"type": "api_key", "key_env": "BOB_KEY", "key": "raw-secret"}
+    with pytest.raises(ValidationError):  # inline secret = extra field, forbidden
+        Config.model_validate(d)
 
 
 def test_inline_secret_is_rejected():

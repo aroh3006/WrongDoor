@@ -7,7 +7,7 @@ keeps them out of any diagnostic output.
 
 import os
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Iterable, Protocol
 
 import httpx
 
@@ -27,10 +27,20 @@ class AuthedClient:
     identity_id: str
     client: httpx.AsyncClient
     attributes: dict[str, str] = field(default_factory=dict)
+    # Header names (lowercased) carrying THIS identity's secret beyond the
+    # always-sensitive defaults — e.g. a configured api-key header. Travels with
+    # the client so any diagnostic can redact exactly what this identity sends.
+    sensitive_headers: frozenset[str] = frozenset()
 
 
 class AuthPlugin(Protocol):
-    """One auth method. Given a client, make it authenticated for its identity."""
+    """One auth method. Given a client, make it authenticated for its identity.
+
+    A plugin that puts a secret in a NON-default header (i.e. not authorization/
+    cookie) should also expose ``sensitive_headers`` — a frozenset of the
+    lowercased header names it fills — so ``redacted`` masks them. The manager
+    reads it defensively, so plugins that only use default headers can omit it.
+    """
 
     async def authenticate(self, client: httpx.AsyncClient) -> None: ...
 
@@ -48,13 +58,20 @@ def resolve_secret(env_name: str) -> str:
     return value
 
 
-# Header names whose values must never be printed/logged.
+# Header names whose values must never be printed/logged. This is the baseline;
+# a plugin using a custom secret header (e.g. api-key) passes it via
+# ``extra_sensitive`` so the CONFIGURED header is masked too, not just these.
 _SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "proxy-authorization"}
 
 
-def redacted(headers) -> dict[str, str]:
-    """Copy of ``headers`` with sensitive values masked, for safe diagnostics."""
+def redacted(headers, extra_sensitive: Iterable[str] = ()) -> dict[str, str]:
+    """Copy of ``headers`` with sensitive values masked, for safe diagnostics.
+
+    ``extra_sensitive`` adds identity-specific secret headers (e.g. the api-key
+    header a given identity was configured with) on top of the always-sensitive
+    defaults. Case-insensitive."""
+    sensitive = _SENSITIVE_HEADERS | {h.lower() for h in extra_sensitive}
     return {
-        k: ("<redacted>" if k.lower() in _SENSITIVE_HEADERS else v)
+        k: ("<redacted>" if k.lower() in sensitive else v)
         for k, v in dict(headers).items()
     }
