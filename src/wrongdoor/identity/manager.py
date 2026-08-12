@@ -51,6 +51,11 @@ async def authenticate_identities(
 
     async def _one(identity) -> AuthedClient:
         plugin = _build_plugin(identity.auth)  # resolves secrets (may raise AuthError)
+        # Gate any credential-POST endpoint (login url / oauth2 token_url) against
+        # the allowlist BEFORE sending — an absolute off-allowlist URL must not be
+        # able to exfiltrate credentials past base_url's check.
+        for auth_url in getattr(plugin, "auth_urls", ()):
+            guard.assert_allowed(str(httpx.URL(base_url).join(auth_url)))
         client = httpx.AsyncClient(
             base_url=base_url,
             transport=transport,

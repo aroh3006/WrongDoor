@@ -167,6 +167,24 @@ def test_loader_roundtrip(tmp_path):
     assert cfg.identities[0].auth.type == "login"
 
 
+def test_config_error_never_echoes_an_inline_secret(tmp_path):
+    # extra="forbid" rejects an inline secret — but the error output must NOT
+    # contain the secret value (§13). Permanent regression guard.
+    p = tmp_path / "config.yaml"
+    p.write_text(
+        "target: {base_url: 'http://127.0.0.1:8000', allow: ['127.0.0.1']}\n"
+        "identities:\n"
+        "  - id: alice\n"
+        "    auth: {type: bearer, token_env: ALICE_TOKEN, token: SUPERSECRET-INLINE-VALUE}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError) as ei:
+        load_config(p)
+    msg = str(ei.value)
+    assert "SUPERSECRET-INLINE-VALUE" not in msg  # the secret value is gone
+    assert "token" in msg  # but the offending field is still named, so it's actionable
+
+
 def test_loader_missing_file():
     with pytest.raises(ConfigError):
         load_config("does-not-exist.yaml")

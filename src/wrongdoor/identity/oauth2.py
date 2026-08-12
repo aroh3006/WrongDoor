@@ -70,6 +70,12 @@ class OAuth2Auth(httpx.Auth):
             token_field=cfg.token_field,
         )
 
+    @property
+    def auth_urls(self) -> tuple[str, ...]:
+        """The token endpoint we POST credentials to (initial fetch AND refresh).
+        The manager gates it against the allowlist before we send."""
+        return (self._token_url,)
+
     # --- AuthPlugin ---------------------------------------------------------
     async def authenticate(self, client: httpx.AsyncClient) -> None:
         # Eager initial fetch BEFORE installing ourselves as client.auth, so this

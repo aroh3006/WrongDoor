@@ -37,6 +37,12 @@ class LoginAuth:
             token_field=cfg.token_field,
         )
 
+    @property
+    def auth_urls(self) -> tuple[str, ...]:
+        """The URL this plugin POSTs credentials to — the manager gates it against
+        the allowlist before we send, same as any other live request."""
+        return (self._url,)
+
     async def authenticate(self, client: httpx.AsyncClient) -> None:
         resp = await client.post(
             self._url, json={"username": self._username, "password": self._password}

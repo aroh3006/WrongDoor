@@ -38,4 +38,20 @@ def load_config(path: str | Path) -> Config:
     try:
         return Config.model_validate(raw)
     except ValidationError as e:
-        raise ConfigError(f"config validation failed:\n{e}") from e
+        raise ConfigError(_format_validation_error(e)) from e
+
+
+def _format_validation_error(exc: ValidationError) -> str:
+    """Render a validation error from field locations + messages ONLY.
+
+    Never include pydantic's ``input`` value: an inline secret (correctly
+    rejected by ``extra="forbid"``) would otherwise be echoed back into the error
+    output — the guard printing the very secret it caught (§13). ``loc`` is a
+    field path (names/indices) and the built-in/our-own ``msg`` texts carry no
+    values, so this stays informative without leaking anything.
+    """
+    lines = ["config validation failed:"]
+    for err in exc.errors(include_url=False):
+        loc = ".".join(str(part) for part in err.get("loc", ())) or "(root)"
+        lines.append(f"  {loc}: {err.get('msg', 'invalid')}")
+    return "\n".join(lines)

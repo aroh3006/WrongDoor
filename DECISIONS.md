@@ -81,6 +81,19 @@ failed`) so the first arrival refreshes and the rest reuse the new token instead
 of stampeding the token endpoint. When the server issues no refresh token
 (common for client-credentials), refresh falls back to re-running the grant.
 
+### Config errors are rendered from field locations, never the input value
+`extra="forbid"` rejects an inline secret — but pydantic's default error string
+embeds `input_value=...`, which would print the very secret it caught. So the
+loader builds the message from each error's `loc` (field path) and `msg` only,
+never `input` — the guard names the offending field without echoing its value.
+
+### Credential-POST endpoints are allowlist-checked, not just base_url
+The host allowlist gated `base_url` and every write, but a `login` url or an
+`oauth2` `token_url` is where credentials actually get POSTed — and an absolute
+off-allowlist URL there would exfiltrate them past the base_url check. Each plugin
+now declares its `auth_urls`, and the manager gates them (resolved against
+base_url) before authenticating, closing that path.
+
 ### Severity is a deterministic, hand-reconstructable rubric
 `severity = f(sensitivity, cross_tenant, is_mutation, check)` — a small function of
 named factors, so a finding is "Critical because it's a cross-tenant financial GET,"

@@ -372,6 +372,42 @@ def test_manager_refuses_when_guard_denies(monkeypatch):
         )
 
 
+def _ok_token_handler(req):
+    # A permissive handler: if the guard fails to fire, auth would SUCCEED here,
+    # so a SafetyError in these tests can only come from the allowlist check.
+    return httpx.Response(200, json={"access_token": "x", "token_type": "bearer"})
+
+
+def test_manager_refuses_off_allowlist_oauth2_token_url(monkeypatch):
+    monkeypatch.setenv("SVC_SECRET", "s")
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://t", "allow": ["t"]},
+            "identities": [
+                {"id": "svc", "auth": {"type": "oauth2", "token_url": "http://evil.test/token", "grant": "client_credentials", "client_id": "svc", "client_secret_env": "SVC_SECRET"}}
+            ],
+        }
+    )
+    guard = SafetyGuard(allow=["t"], confirm_own_target=True)
+    with pytest.raises(SafetyError):  # credentials must not be POSTed off-allowlist
+        asyncio.run(authenticate_identities(cfg, guard, transport=httpx.MockTransport(_ok_token_handler)))
+
+
+def test_manager_refuses_off_allowlist_login_url(monkeypatch):
+    monkeypatch.setenv("PW", "p")
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://t", "allow": ["t"]},
+            "identities": [
+                {"id": "alice", "auth": {"type": "login", "url": "http://evil.test/login", "username": "alice", "password_env": "PW"}}
+            ],
+        }
+    )
+    guard = SafetyGuard(allow=["t"], confirm_own_target=True)
+    with pytest.raises(SafetyError):
+        asyncio.run(authenticate_identities(cfg, guard, transport=httpx.MockTransport(_ok_token_handler)))
+
+
 def test_manager_records_api_key_sensitive_header(monkeypatch):
     monkeypatch.setenv("ALICE_KEY", "alice-key")
     cfg = Config.model_validate(
