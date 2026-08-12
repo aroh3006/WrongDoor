@@ -32,7 +32,7 @@ def test_run_reports_exactly_the_planted_bola(monkeypatch):
     guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=True)
     transport = httpx.ASGITransport(app=vulnerable_app)
 
-    judgments = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
+    judgments, _ = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
     found = findings(judgments)
 
     # Known answer: BOLA on invoices, notes AND projects (the chained resource),
@@ -66,7 +66,7 @@ def test_golden_findings_render_in_all_formats(monkeypatch):
     guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=True)
     transport = httpx.ASGITransport(app=vulnerable_app)
 
-    judgments = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
+    judgments, _ = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport))
     fs = build_findings(judgments, cfg)
     assert len(fs) == 10
     assert Counter(f.finding_type for f in fs) == {"BOLA": 6, "MISSING_AUTH": 2, "BFLA": 2}
@@ -80,3 +80,27 @@ def test_golden_findings_render_in_all_formats(monkeypatch):
 
     assert 'failures="10"' in junit.render(fs, total_checks=len(judgments))
     assert "BFLA" in html.render(fs) and "getAllInvoices" in html.render(fs)
+
+
+def test_cleanup_removes_only_the_seeded_objects(monkeypatch):
+    """--cleanup deletes exactly what the run created, children before parents, and
+    reports (never deletes) resources the spec has no DELETE op for."""
+    monkeypatch.setenv("ALICE_PW", "alice-pw")
+    monkeypatch.setenv("BOB_PW", "bob-pw")
+
+    cfg = load_config(_VULN / "config.yaml")
+    ops = load_operations(_VULN / "openapi.yaml")
+    guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=True)
+    transport = httpx.ASGITransport(app=vulnerable_app)
+
+    _, cleanup = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport, cleanup=True))
+
+    assert cleanup is not None
+    assert cleanup.total == 10  # 5 resources x 2 identities seeded this run
+    # invoices/notes/orgs/projects each have a DELETE op (2 objects each) -> 8 deleted.
+    assert cleanup.deleted == 8
+    # documents has NO DELETE op in the spec -> its 2 objects are reported, not deleted.
+    assert len(cleanup.left_behind) == 2
+    assert all("documents/" in n and "no delete operation" in n for n in cleanup.left_behind)
+    # orgs deleted cleanly (never a 409) -> proves projects were removed BEFORE their org.
+    assert not any("orgs/" in n for n in cleanup.left_behind)

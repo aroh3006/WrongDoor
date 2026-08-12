@@ -28,6 +28,17 @@ paths:
       responses:
         "200":
           description: ok
+    delete:
+      operationId: deleteInvoice
+      parameters:
+        - name: invoice_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: deleted
   /documents:
     post:
       operationId: createDocument
@@ -76,6 +87,17 @@ paths:
       responses:
         "200":
           description: ok
+    delete:
+      operationId: deleteNote
+      parameters:
+        - name: note_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: deleted
   /admin/all-invoices:
     get:
       operationId: getAllInvoices
@@ -100,6 +122,18 @@ paths:
       responses:
         "201":
           description: created
+  /orgs/{org_id}:
+    delete:
+      operationId: deleteOrg
+      parameters:
+        - name: org_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: deleted
   /projects:
     post:
       operationId: createProject
@@ -124,6 +158,17 @@ paths:
       responses:
         "200":
           description: ok
+    delete:
+      operationId: deleteProject
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: deleted
 components:
   schemas:
     InvoiceIn:

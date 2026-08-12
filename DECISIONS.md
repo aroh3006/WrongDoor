@@ -72,6 +72,18 @@ is injected into the child's create body — and the parent used is one the *sam
 identity owns, so ownership chains cleanly. A dependency cycle is a hard error,
 caught offline by `wrongdoor lint` (the tool's only graph traversal).
 
+### --cleanup deletes only ledger objects, children first, best-effort
+Teardown deletes exactly what the run created — the ledger is the manifest, so
+nothing else is ever touched. Deletes go via each resource's spec DELETE op, as
+the object's owner (legitimate rights), in the reverse of the seeder's create
+order (children before parents, so a parent delete isn't blocked by a live
+child). Unlike the seeder (which aborts on a bad write, because forged ground
+truth is dangerous), cleanup is best-effort and non-fatal: it treats 404 as
+success (already gone == the goal), collects every other failure into a "deleted
+N/M; left behind […]" summary, reports resources with no DELETE op instead of
+guessing a URL, and never changes the run's exit code — a teardown hiccup must
+not mask or fake the security result.
+
 ### prance for spec parsing; openapi-core deferred
 `$ref` resolution is a solved, subtle problem — we don't reimplement it. openapi-core
 (request/response *validation*) isn't needed yet, so it's held until a phase does.

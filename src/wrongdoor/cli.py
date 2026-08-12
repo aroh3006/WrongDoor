@@ -22,7 +22,8 @@ from .config.loader import ConfigError, load_config
 from .config.schema import Config
 from .engine.executor import execute
 from .engine.planner import ANONYMOUS_ID, plan_bfla, plan_matrix
-from .engine.seeder import SeedOutcome
+from .engine.seeder import CleanupOutcome, SeedOutcome
+from .engine.seeder import cleanup as cleanup_objects
 from .engine.seeder import seed as seed_objects
 from .engine.verdict import Judgment, judge_all
 from .identity.base import AuthError
@@ -194,6 +195,21 @@ def _print_ledger(outcome: SeedOutcome) -> None:
         _err.print(f"[yellow]note:[/yellow] {note}")
 
 
+def _print_cleanup(outcome: CleanupOutcome) -> None:
+    # Operational output -> stderr, so stdout stays clean for machine formats
+    # (e.g. `wrongdoor run --format json --cleanup | jq`).
+    if outcome.total == 0:
+        _err.print("[dim]cleanup: nothing to delete[/dim]")
+        return
+    style = "green" if outcome.ok else "yellow"
+    _err.print(
+        f"[{style}]cleanup:[/{style}] deleted {outcome.deleted}/{outcome.total} "
+        f"object(s) created this run"
+    )
+    for item in outcome.left_behind:
+        _err.print(f"  [yellow]left behind:[/yellow] {item}")
+
+
 @app.command("run")
 def run_cmd(
     config: Path = typer.Option(..., "--config", "-c", help="Path to config.yaml"),
@@ -210,6 +226,11 @@ def run_cmd(
     fail_on: str = typer.Option("low", "--fail-on", help="Exit non-zero if any finding is >= this severity"),
     include_bodies: bool = typer.Option(
         False, "--include-bodies", help="Include response bodies (sensitive) in the report"
+    ),
+    cleanup: bool = typer.Option(
+        False,
+        "--cleanup",
+        help="After reporting, delete the objects WrongDoor created this run (owner DELETEs; best-effort)",
     ),
 ) -> None:
     """Full pipeline: authenticate, seed, sweep cross-identity access, and report findings."""
@@ -236,8 +257,10 @@ def run_cmd(
 
     guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=confirm_own_target)
     try:
-        judgments = asyncio.run(
-            _run_pipeline(cfg, operations, guard, include_mutations=include_mutations)
+        judgments, cleanup_outcome = asyncio.run(
+            _run_pipeline(
+                cfg, operations, guard, include_mutations=include_mutations, cleanup=cleanup
+            )
         )
     except SafetyError as e:
         _err.print(f"[red]refused:[/red] {e}")
@@ -248,6 +271,8 @@ def run_cmd(
 
     finding_list = build_findings(judgments, cfg)
     _emit_report(report_format, finding_list, judgments, output, include_bodies, spec)
+    if cleanup_outcome is not None:
+        _print_cleanup(cleanup_outcome)  # after the report; a teardown hiccup won't change exit
 
     top = max_severity(finding_list)
     if top is not None and top >= threshold:
@@ -261,10 +286,12 @@ async def _run_pipeline(
     *,
     transport=None,
     include_mutations: bool = False,
-) -> list[Judgment]:
+    cleanup: bool = False,
+) -> tuple[list[Judgment], CleanupOutcome | None]:
     # transport is injectable so tests can drive the whole pipeline against an
     # in-process ASGI app; production passes None (real network).
     registry = await authenticate_identities(cfg, guard, transport=transport)
+    cleanup_outcome: CleanupOutcome | None = None
     try:
         outcome = await seed_objects(cfg, registry, operations, guard)
         real_ids = list(registry.keys())  # real identities only (excludes anonymous)
@@ -285,9 +312,16 @@ async def _run_pipeline(
         planned += plan_bfla(operations, identity_attrs, cfg.operations)
         results = await execute(planned, registry)
         judgments = judge_all(results, outcome.ledger)
+        if cleanup:
+            # Evidence is already captured (the judgments + the ledger's canonical
+            # bodies), so deleting now can't change the result. Owners still hold
+            # live sessions here, before aclose_all below.
+            cleanup_outcome = await cleanup_objects(
+                cfg, registry, operations, guard, outcome.ledger
+            )
     finally:
         await aclose_all(registry)
-    return judgments
+    return judgments, cleanup_outcome
 
 
 def _print_dry_run(cfg: Config, operations: list[Operation]) -> None:

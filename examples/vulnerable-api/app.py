@@ -81,6 +81,17 @@ def get_invoice(invoice_id: int, authorization: str | None = Header(default=None
     return inv  # returns ANY user's invoice -- the planted bug
 
 
+@app.delete("/invoices/{invoice_id}", status_code=204)
+def delete_invoice(invoice_id: int, authorization: str | None = Header(default=None)) -> None:
+    user = _require_user(authorization)  # DELETE is owner-only (correct) -> lets cleanup work
+    inv = _INVOICES.get(invoice_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if inv["owner"] != user:
+        raise HTTPException(status_code=403, detail="forbidden")
+    del _INVOICES[invoice_id]
+
+
 @app.post("/documents", status_code=201)
 def create_document(body: DocumentIn, authorization: str | None = Header(default=None)) -> dict:
     global _next_id
@@ -129,6 +140,17 @@ def get_note(note_id: int) -> dict:  # NO auth parameter, NO check -> missing au
     if note is None:
         raise HTTPException(status_code=404, detail="not found")
     return note
+
+
+@app.delete("/notes/{note_id}", status_code=204)
+def delete_note(note_id: int, authorization: str | None = Header(default=None)) -> None:
+    user = _require_user(authorization)  # owner-only delete (cleanup uses the owner)
+    note = _NOTES.get(note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if note["owner"] != user:
+        raise HTTPException(status_code=403, detail="forbidden")
+    del _NOTES[note_id]
 
 
 # --- admin endpoints: PLANTED BFLA (D2) + a secured control ------------------
@@ -192,3 +214,29 @@ def get_project(project_id: int, authorization: str | None = Header(default=None
     if project is None:
         raise HTTPException(status_code=404, detail="not found")
     return project
+
+
+@app.delete("/projects/{project_id}", status_code=204)
+def delete_project(project_id: int, authorization: str | None = Header(default=None)) -> None:
+    user = _require_user(authorization)  # owner-only delete
+    project = _PROJECTS.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if project["owner"] != user:
+        raise HTTPException(status_code=403, detail="forbidden")
+    del _PROJECTS[project_id]
+
+
+@app.delete("/orgs/{org_id}", status_code=204)
+def delete_org(org_id: int, authorization: str | None = Header(default=None)) -> None:
+    user = _require_user(authorization)  # owner-only delete
+    org = _ORGS.get(org_id)
+    if org is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if org["owner"] != user:
+        raise HTTPException(status_code=403, detail="forbidden")
+    if any(p["org_id"] == org_id for p in _PROJECTS.values()):
+        # FK: an org can't be deleted while a project still references it. This is
+        # what forces cleanup to delete children (projects) BEFORE parents (orgs).
+        raise HTTPException(status_code=409, detail="org still has projects")
+    del _ORGS[org_id]

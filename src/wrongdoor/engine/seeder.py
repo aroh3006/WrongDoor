@@ -30,14 +30,14 @@ import httpx
 
 from ..config.schema import Config, LoginAuthConfig
 from ..identity.base import AuthedClient
-from ..safety.guard import SafetyGuard
+from ..safety.guard import SafetyError, SafetyGuard
 from ..spec.openapi import (
     Operation,
     access_operations,
     create_operations,
     synthesize_body,
 )
-from .ledger import OwnershipLedger
+from .ledger import LedgerEntry, OwnershipLedger
 
 
 class SeederError(Exception):
@@ -49,6 +49,23 @@ class SeedOutcome:
     ledger: OwnershipLedger
     failures: list[str] = field(default_factory=list)  # human-readable per-object notes
     capped: bool = False  # True if max_objects stopped seeding early
+
+
+@dataclass
+class CleanupOutcome:
+    """Result of a teardown pass: how many ledger objects were deleted, and which
+    were left behind (with the reason). ``total == deleted + len(left_behind)``."""
+
+    deleted: int = 0
+    left_behind: list[str] = field(default_factory=list)  # "resource/id (reason)" per object
+
+    @property
+    def total(self) -> int:
+        return self.deleted + len(self.left_behind)
+
+    @property
+    def ok(self) -> bool:
+        return not self.left_behind
 
 
 async def seed(
@@ -127,6 +144,87 @@ async def seed(
     return outcome
 
 
+async def cleanup(
+    config: Config,
+    registry: dict[str, AuthedClient],
+    operations: list[Operation],
+    guard: SafetyGuard,
+    ledger: OwnershipLedger,
+) -> CleanupOutcome:
+    """Delete every object recorded in the ledger — and ONLY those objects.
+
+    This is teardown for the data ``seed()`` created; the ledger is an exact
+    manifest of what WrongDoor made this run, so nothing else on the target is
+    ever touched. Each delete is sent via the resource's ``DELETE`` access-op
+    from the spec, as the object's OWNER (who has legitimate delete rights), and
+    gated by the Safety Guard first.
+
+    Ordering: child-before-parent (the reverse of the seeder's create order), so
+    a parent delete isn't blocked by a still-present child (e.g. an org that
+    still has projects).
+
+    Failure posture — deliberately the OPPOSITE of ``seed()``: seeding aborts on
+    a guard refusal or a bad create (a partial/forged ground truth is dangerous),
+    but cleanup is best-effort and NEVER aborts on a single failure. It attempts
+    a delete for every ledger object, treats 404 as success (already gone == the
+    goal, idempotent), and collects every other outcome into ``left_behind`` so
+    the target is left in a known, reported state rather than a silent half-clean.
+    """
+    base_url = config.target.base_url
+    deps = {d.resource: d for d in config.seeding.dependencies}
+    accesses = access_operations(operations)
+
+    by_resource: dict[str, list[LedgerEntry]] = {}
+    for entry in ledger.entries():
+        by_resource.setdefault(entry.resource_type, []).append(entry)
+
+    outcome = CleanupOutcome()
+    for resource_type in _delete_order(list(by_resource), deps):  # children first
+        delete_op = _matching_delete(accesses, resource_type)
+        for entry in by_resource[resource_type]:
+            note = await _delete_one(entry, delete_op, registry, guard, base_url)
+            if note is None:
+                outcome.deleted += 1
+            else:
+                outcome.left_behind.append(note)
+    return outcome
+
+
+async def _delete_one(
+    entry: LedgerEntry,
+    delete_op: Operation | None,
+    registry: dict[str, AuthedClient],
+    guard: SafetyGuard,
+    base_url: str,
+) -> str | None:
+    """Delete one ledger object. Return None on success, else a left-behind note.
+
+    A guard refusal here is recorded and skipped (not raised) — cleanup must stay
+    non-fatal — but the request is still never sent, so the safety boundary holds.
+    """
+    ref = f"{entry.resource_type}/{entry.object_id}"
+    if delete_op is None:
+        return f"{ref} (no delete operation in spec)"
+    authed = registry.get(entry.owner)
+    if authed is None:
+        return f"{ref} (owner {entry.owner!r} has no live session)"
+
+    param = delete_op.object_id_params[0]
+    path = delete_op.path_template.replace("{" + param.name + "}", entry.object_id)
+    try:
+        guard.assert_allowed(_join(base_url, path))  # LIVE DELETE — gate first
+    except SafetyError as e:
+        return f"{ref} (refused by safety guard: {e})"
+
+    try:
+        resp = await authed.client.request("DELETE", path)
+    except httpx.HTTPError as e:
+        return f"{ref} (request error: {e})"
+    if resp.status_code // 100 == 2 or resp.status_code == 404:
+        return None  # 2xx deleted, or 404 already gone — both mean the object is gone
+    return f"{ref} (HTTP {resp.status_code})"
+
+
 # --- helpers ---------------------------------------------------------------
 def _order_by_dependency(creates: list[Operation], deps: dict) -> list[Operation]:
     """Order create-ops so a parent resource is always seeded before its children."""
@@ -141,6 +239,35 @@ def _order_by_dependency(creates: list[Operation], deps: dict) -> list[Operation
     for resource in _toposort(list(by_resource), parent_of):
         ordered.extend(by_resource[resource])
     return ordered
+
+
+def _delete_order(resource_types: list[str], deps: dict) -> list[str]:
+    """Resource types in child-before-parent order — the reverse of create order.
+
+    Reuses the seeder's topological sort (parents first) and reverses it. A cycle
+    is impossible here (seeding would already have raised), but we stay non-fatal
+    and fall back to the given order if one somehow appears."""
+    unique = list(dict.fromkeys(resource_types))  # dedupe, keep ledger order
+    parent_of = {
+        r: deps[r].parent for r in unique if r in deps and deps[r].parent in unique
+    }
+    try:
+        parents_first = _toposort(unique, parent_of)
+    except SeederError:
+        parents_first = unique
+    parents_first.reverse()
+    return parents_first
+
+
+def _matching_delete(accesses: list[Operation], resource_type: str) -> Operation | None:
+    for op in accesses:
+        if (
+            op.method == "DELETE"
+            and op.resource_type == resource_type
+            and len(op.object_id_params) == 1
+        ):
+            return op
+    return None
 
 
 def _toposort(resources: list[str], parent_of: dict[str, str]) -> list[str]:
