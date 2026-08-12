@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from ..engine.verdict import Judgment, Verdict
+from ..risk import Severity
 from .finding import Finding
 
 
@@ -17,6 +18,13 @@ def render(console: Console, judgments: list[Judgment], findings: list[Finding])
         f"pass={counts[Verdict.PASS]}   broken={counts[Verdict.BROKEN]}   "
         f"inconclusive={counts[Verdict.INCONCLUSIVE]}\n"
     )
+    if findings:
+        by_sev = Counter(f.severity for f in findings)
+        by_type = Counter(f.finding_type for f in findings)
+        sev_line = "   ".join(f"{s.name}={by_sev[s]}" for s in sorted(Severity, reverse=True) if by_sev[s])
+        type_line = "   ".join(f"{t}={n}" for t, n in sorted(by_type.items()))
+        console.print(f"by severity: {sev_line}")
+        console.print(f"by type:     {type_line}\n")
     for f in findings:
         lines = [
             f"severity:  {f.severity.name}",

@@ -25,6 +25,7 @@
   <div class="counts">
     {% for name, n in by_severity.items() %}{% if n %}<span class="{{ name }}">{{ name }}: {{ n }}</span>{% endif %}{% endfor %}
   </div>
+  {% if by_type %}<p class="meta">By type: {% for t, n in by_type.items() %}{{ t }} &times;{{ n }}{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
 
   {% for f in findings %}
   <div class="card">

@@ -130,6 +130,9 @@ def build_findings(judgments: list[Judgment], config: Config) -> list[Finding]:
                 judgment=j,
             )
         )
+    # Most severe first, with a deterministic tiebreak, so every report leads with
+    # the worst finding rather than plan order.
+    findings.sort(key=lambda f: (-int(f.severity), f.finding_type, f.resource_type, f.object_id))
     return findings
 
 

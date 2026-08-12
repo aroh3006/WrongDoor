@@ -81,6 +81,32 @@ def test_max_severity():
     assert max_severity([]) is None
 
 
+def test_findings_are_sorted_most_severe_first():
+    invoice = _violation()  # invoices, high + cross-tenant -> CRITICAL
+    note_req = PlannedRequest(
+        acting_identity="bob",
+        method="GET",
+        path="/notes/9",
+        operation_id="getNote",
+        target=ObjectRef("notes", "9"),
+        expected=Expectation.DENY,
+        is_mutation=False,
+        check="bola",
+    )
+    note = Judgment(
+        verdict=Verdict.VIOLATION,
+        reason="x",
+        request=note_req,
+        observed=ObservedResponse(status=200, body={"id": 9, "owner": "alice"}),
+        owner="alice",
+        matched_fields=("id", "owner"),
+    )
+    # note (HIGH) given first, invoice (CRITICAL) second -> output must lead with CRITICAL
+    fs = build_findings([note, invoice], _config())
+    assert [int(f.severity) for f in fs] == sorted([int(f.severity) for f in fs], reverse=True)
+    assert fs[0].severity is Severity.CRITICAL
+
+
 def test_unauthenticated_violation_becomes_missing_auth_finding():
     from wrongdoor.engine.planner import ANONYMOUS_ID
 

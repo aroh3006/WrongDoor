@@ -51,6 +51,7 @@ def test_json_report_shape_and_redaction():
     assert doc["tool"] == "wrongdoor"
     assert doc["summary"]["findings"] == 1
     assert doc["summary"]["by_severity"]["CRITICAL"] == 1
+    assert doc["summary"]["by_type"] == {"BOLA": 1}
     assert doc["findings"][0]["type"] == "BOLA"
     assert "hush" not in json_report.render(_findings())  # value redacted by default
 
