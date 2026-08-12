@@ -58,10 +58,44 @@ class ApiKeyAuthConfig(BaseModel):
     header: str = Field(default="X-API-Key", min_length=1)
 
 
+class OAuth2AuthConfig(BaseModel):
+    """An OAuth2 token grant: fetch a bearer token from ``token_url`` and, unlike
+    the other types, refresh-and-retry once on a 401. Supports the two
+    non-interactive grants (client-credentials, resource-owner password)."""
+
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["oauth2"]
+    token_url: str = Field(min_length=1)  # token endpoint (relative to base_url or same-host)
+    grant: Literal["client_credentials", "password"] = "client_credentials"
+    # client-credentials (and optionally password): the confidential client.
+    client_id: str | None = None
+    client_secret_env: str | None = None  # NAME of the env var holding the client secret
+    # password grant: the resource owner.
+    username: str | None = None
+    password_env: str | None = None  # NAME of the env var holding the password
+    scope: str | None = None
+    token_field: str = "access_token"  # JSON field carrying the access token
+
+    @model_validator(mode="after")
+    def _grant_requirements(self) -> "OAuth2AuthConfig":
+        # Enforce per-grant required fields here (not on the field) so the error
+        # names exactly what's missing for the grant actually chosen.
+        need = {
+            "client_credentials": ("client_id", "client_secret_env"),
+            "password": ("username", "password_env"),
+        }[self.grant]
+        missing = [f for f in need if not getattr(self, f)]
+        if missing:
+            raise ValueError(
+                f"oauth2 {self.grant} grant requires: {', '.join(missing)}"
+            )
+        return self
+
+
 # Discriminated union: Pydantic picks the variant by the `type` value, giving
 # precise "unknown auth type 'foo'" style errors instead of a confusing merge.
 AuthConfig = Annotated[
-    Union[BearerAuthConfig, LoginAuthConfig, ApiKeyAuthConfig],
+    Union[BearerAuthConfig, LoginAuthConfig, ApiKeyAuthConfig, OAuth2AuthConfig],
     Field(discriminator="type"),
 ]
 

@@ -69,6 +69,18 @@ config time, each plugin declares the secret header it sets and that travels wit
 the `AuthedClient`, so `redacted()` masks the *configured* header, not just a
 hardcoded default — redaction stays correct even for a custom header name.
 
+### OAuth2 is an httpx.Auth, and refresh is serialized to avoid a stampede
+OAuth2 is the one auth type that must act on every request, not set a header once
+— a token can expire mid-run, so we have to see the 401 and re-issue. httpx's own
+extension point for that is `httpx.Auth.async_auth_flow` (yield request, inspect
+response, yield a retry), so the plugin *is* an `httpx.Auth` rather than bolting
+retry logic onto the set-header-once pattern. Because the executor is concurrent,
+a just-expired token can 401 many in-flight requests at once; refresh runs under a
+lock with a staleness check (`refresh only if the token is still the one that just
+failed`) so the first arrival refreshes and the rest reuse the new token instead
+of stampeding the token endpoint. When the server issues no refresh token
+(common for client-credentials), refresh falls back to re-running the grant.
+
 ### Severity is a deterministic, hand-reconstructable rubric
 `severity = f(sensitivity, cross_tenant, is_mutation, check)` — a small function of
 named factors, so a finding is "Critical because it's a cross-tenant financial GET,"

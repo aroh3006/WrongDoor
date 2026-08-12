@@ -12,8 +12,9 @@ documents.
 """
 
 import secrets
+from urllib.parse import parse_qs
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
 
 app = FastAPI(title="WrongDoor vulnerable demo API")
@@ -278,3 +279,81 @@ def delete_org(org_id: int, authorization: str | None = Header(default=None)) ->
         # what forces cleanup to delete children (projects) BEFORE parents (orgs).
         raise HTTPException(status_code=409, detail="org still has projects")
     del _ORGS[org_id]
+
+
+# --- OAuth2: token endpoint + a protected resource (exercises the oauth2 type) --
+# A form-encoded token endpoint (RFC 6749) supporting the two non-interactive
+# grants plus refresh_token, and an `orders` resource protected by the bearer
+# token it issues. GET /orders/{id} has NO ownership check -> BOLA, reached via
+# an OAuth2 access token end to end. Tokens here are multi-use / non-expiring, so
+# the grant sweep is deterministic (the refresh path is unit-tested separately).
+_OAUTH_CLIENTS = {"alice-client": ("alice-secret", "alice"), "bob-client": ("bob-secret", "bob")}  # id -> (secret, user)
+_OAUTH_ACCESS: dict[str, str] = {}  # access_token -> user
+_OAUTH_REFRESH: dict[str, str] = {}  # refresh_token -> user
+_ORDERS: dict[int, dict] = {}
+_oauth_seq = {"n": 0}
+
+
+class OrderIn(BaseModel):
+    item: str = ""
+
+
+def _issue_tokens(user: str) -> dict:
+    _oauth_seq["n"] += 1
+    n = _oauth_seq["n"]
+    access, refresh = f"access-{user}-{n}", f"refresh-{user}-{n}"
+    _OAUTH_ACCESS[access] = user
+    _OAUTH_REFRESH[refresh] = user
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "expires_in": 3600}
+
+
+@app.post("/oauth/token")
+async def oauth_token(request: Request) -> dict:
+    # Parse the x-www-form-urlencoded body ourselves (keeps the demo free of the
+    # python-multipart dependency FastAPI's Form() would pull in).
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode()).items()}
+    grant = form.get("grant_type")
+    if grant == "password":
+        user = form.get("username", "")
+        if _USERS.get(user, {}).get("password") != form.get("password"):
+            raise HTTPException(status_code=401, detail="invalid credentials")
+    elif grant == "client_credentials":
+        cc = _OAUTH_CLIENTS.get(form.get("client_id", ""))
+        if cc is None or cc[0] != form.get("client_secret"):
+            raise HTTPException(status_code=401, detail="invalid client")
+        user = cc[1]
+    elif grant == "refresh_token":
+        user = _OAUTH_REFRESH.get(form.get("refresh_token", ""))
+        if user is None:
+            raise HTTPException(status_code=401, detail="invalid refresh token")
+    else:
+        raise HTTPException(status_code=400, detail="unsupported grant_type")
+    return _issue_tokens(user)
+
+
+def _require_oauth(authorization: str | None) -> str:
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    user = _OAUTH_ACCESS.get(authorization.removeprefix("Bearer "))
+    if user is None:
+        raise HTTPException(status_code=401, detail="invalid or expired token")
+    return user
+
+
+@app.post("/orders", status_code=201)
+def create_order(body: OrderIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_oauth(authorization)
+    order = {"id": _next_id, "owner": user, "tenant": _USERS[user]["tenant"], "item": body.item}
+    _ORDERS[_next_id] = order
+    _next_id += 1
+    return order
+
+
+@app.get("/orders/{order_id}")
+def get_order(order_id: int, authorization: str | None = Header(default=None)) -> dict:
+    _require_oauth(authorization)  # authenticated via OAuth2, but NO ownership check -> BOLA
+    order = _ORDERS.get(order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return order

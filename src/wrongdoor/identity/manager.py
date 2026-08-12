@@ -14,12 +14,14 @@ from ..config.schema import (
     BearerAuthConfig,
     Config,
     LoginAuthConfig,
+    OAuth2AuthConfig,
 )
 from ..safety.guard import SafetyGuard
 from .apikey import ApiKeyAuth
 from .base import AuthedClient, AuthError, AuthPlugin
 from .bearer import BearerAuth
 from .cookie import LoginAuth
+from .oauth2 import OAuth2Auth
 
 # Conservative timeout so a hung target can't stall a run indefinitely (§5.9).
 _DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
@@ -32,6 +34,8 @@ def _build_plugin(auth) -> AuthPlugin:
         return LoginAuth.from_config(auth)
     if isinstance(auth, ApiKeyAuthConfig):
         return ApiKeyAuth.from_config(auth)
+    if isinstance(auth, OAuth2AuthConfig):
+        return OAuth2Auth.from_config(auth)
     raise AuthError(f"unsupported auth type: {getattr(auth, 'type', auth)!r}")
 
 

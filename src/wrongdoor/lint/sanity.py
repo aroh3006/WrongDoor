@@ -15,6 +15,7 @@ from ..config.schema import (
     BearerAuthConfig,
     Config,
     LoginAuthConfig,
+    OAuth2AuthConfig,
 )
 from ..safety.guard import SafetyError, SafetyGuard
 from ..spec.openapi import Operation, access_operations, create_operations
@@ -64,6 +65,8 @@ def _secret_vars(auth) -> list[str]:
         return [auth.password_env]
     if isinstance(auth, ApiKeyAuthConfig):
         return [auth.key_env]
+    if isinstance(auth, OAuth2AuthConfig):
+        return [v for v in (auth.client_secret_env, auth.password_env) if v]
     return []
 
 

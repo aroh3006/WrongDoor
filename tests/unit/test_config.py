@@ -11,6 +11,7 @@ from wrongdoor.config.schema import (
     BearerAuthConfig,
     Config,
     LoginAuthConfig,
+    OAuth2AuthConfig,
 )
 
 
@@ -57,6 +58,51 @@ def test_api_key_auth_parses_with_default_and_custom_header():
 def test_api_key_inline_key_rejected():
     d = _valid_dict()
     d["identities"][1]["auth"] = {"type": "api_key", "key_env": "BOB_KEY", "key": "raw-secret"}
+    with pytest.raises(ValidationError):  # inline secret = extra field, forbidden
+        Config.model_validate(d)
+
+
+def test_oauth2_client_credentials_and_password_grants_parse():
+    d = _valid_dict()
+    d["identities"][1]["auth"] = {
+        "type": "oauth2",
+        "token_url": "/oauth/token",
+        "grant": "client_credentials",
+        "client_id": "svc",
+        "client_secret_env": "SVC_SECRET",
+    }
+    cfg = Config.model_validate(d)
+    assert isinstance(cfg.identities[1].auth, OAuth2AuthConfig)
+    assert cfg.identities[1].auth.token_field == "access_token"  # default
+
+    d["identities"][1]["auth"] = {
+        "type": "oauth2",
+        "token_url": "/oauth/token",
+        "grant": "password",
+        "username": "bob",
+        "password_env": "BOB_PW",
+    }
+    assert Config.model_validate(d).identities[1].auth.grant == "password"
+
+
+def test_oauth2_missing_grant_fields_rejected():
+    d = _valid_dict()
+    # client_credentials grant without the client secret -> validation error
+    d["identities"][1]["auth"] = {"type": "oauth2", "token_url": "/t", "grant": "client_credentials", "client_id": "svc"}
+    with pytest.raises(ValidationError):
+        Config.model_validate(d)
+    # password grant without the password env -> validation error
+    d["identities"][1]["auth"] = {"type": "oauth2", "token_url": "/t", "grant": "password", "username": "bob"}
+    with pytest.raises(ValidationError):
+        Config.model_validate(d)
+
+
+def test_oauth2_inline_secret_rejected():
+    d = _valid_dict()
+    d["identities"][1]["auth"] = {
+        "type": "oauth2", "token_url": "/t", "grant": "client_credentials",
+        "client_id": "svc", "client_secret_env": "SVC_SECRET", "client_secret": "raw",
+    }
     with pytest.raises(ValidationError):  # inline secret = extra field, forbidden
         Config.model_validate(d)
 

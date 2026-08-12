@@ -6,6 +6,7 @@ handler stands in for the target's /login and /me endpoints.
 
 import asyncio
 import json
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -16,6 +17,7 @@ from wrongdoor.identity.base import AuthError, redacted, resolve_secret
 from wrongdoor.identity.bearer import BearerAuth
 from wrongdoor.identity.cookie import LoginAuth
 from wrongdoor.identity.manager import aclose_all, authenticate_identities
+from wrongdoor.identity.oauth2 import OAuth2Auth
 from wrongdoor.safety.guard import SafetyError, SafetyGuard
 
 
@@ -93,6 +95,116 @@ def test_api_key_from_config_missing_env_raises(monkeypatch):
     monkeypatch.delenv("NO_SUCH_KEY", raising=False)
     with pytest.raises(AuthError):
         ApiKeyAuth.from_config(ApiKeyAuthConfig(type="api_key", key_env="NO_SUCH_KEY"))
+
+
+# --- oauth2 ----------------------------------------------------------------
+def test_oauth2_client_credentials_fetches_and_attaches_bearer():
+    def handler(req):
+        if req.url.path == "/oauth/token":
+            form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
+            assert form["grant_type"] == "client_credentials"
+            assert form["client_id"] == "svc" and form["client_secret"] == "s3cr"
+            return httpx.Response(200, json={"access_token": "AT", "token_type": "bearer"})
+        return httpx.Response(200, json={"auth": req.headers.get("authorization")})
+
+    plugin = OAuth2Auth(token_url="/oauth/token", grant="client_credentials", client_id="svc", client_secret="s3cr")
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)
+            return (await c.get("/x")).json()["auth"]
+
+    assert asyncio.run(run()) == "Bearer AT"
+
+
+def test_oauth2_password_grant_fetches_bearer():
+    def handler(req):
+        if req.url.path == "/oauth/token":
+            form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
+            assert form["grant_type"] == "password"
+            assert form["username"] == "bob" and form["password"] == "pw"
+            return httpx.Response(200, json={"access_token": "PT", "token_type": "bearer"})
+        return httpx.Response(200, json={"auth": req.headers.get("authorization")})
+
+    plugin = OAuth2Auth(token_url="/oauth/token", grant="password", username="bob", password="pw")
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)
+            return (await c.get("/x")).json()["auth"]
+
+    assert asyncio.run(run()) == "Bearer PT"
+
+
+def _oauth_refresh_handler(*, issue_refresh=True):
+    """Token endpoint + protected resource where the FIRST-issued access token is
+    dead on arrival (401), forcing exactly one refresh; the refreshed token works.
+    Records each token request's grant_type in ``state['grants']``."""
+    state = {"n": 0, "grants": [], "expired": set()}
+
+    def handler(req):
+        if req.url.path == "/oauth/token":
+            form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
+            state["grants"].append(form.get("grant_type"))
+            state["n"] += 1
+            access = f"access-{state['n']}"
+            if state["n"] == 1:
+                state["expired"].add(access)  # first token pre-expired -> one refresh
+            body = {"access_token": access, "token_type": "bearer"}
+            if issue_refresh:
+                body["refresh_token"] = f"refresh-{state['n']}"
+            return httpx.Response(200, json=body)
+        if req.url.path == "/orders/1":
+            presented = req.headers.get("authorization", "").removeprefix("Bearer ")
+            if not presented or presented in state["expired"]:
+                return httpx.Response(401, json={"detail": "expired"})
+            return httpx.Response(200, json={"ok": True, "token": presented})
+        return httpx.Response(404, json={})
+
+    return handler, state
+
+
+def test_oauth2_refreshes_and_retries_once_on_401():
+    handler, state = _oauth_refresh_handler(issue_refresh=True)
+    plugin = OAuth2Auth(token_url="/oauth/token", grant="client_credentials", client_id="svc", client_secret="s")
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)  # fetches access-1 (pre-expired)
+            return (await c.get("/orders/1")).json()
+
+    body = asyncio.run(run())
+    assert body == {"ok": True, "token": "access-2"}  # retried with the refreshed token
+    assert state["grants"] == ["client_credentials", "refresh_token"]  # grant, then refresh
+
+
+def test_oauth2_reauths_when_no_refresh_token():
+    handler, state = _oauth_refresh_handler(issue_refresh=False)
+    plugin = OAuth2Auth(token_url="/oauth/token", grant="client_credentials", client_id="svc", client_secret="s")
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)
+            return (await c.get("/orders/1")).json()
+
+    body = asyncio.run(run())
+    assert body["ok"] and body["token"] == "access-2"
+    # No refresh token was issued -> the refresh falls back to re-running the grant.
+    assert state["grants"] == ["client_credentials", "client_credentials"]
+
+
+def test_oauth2_bad_credentials_raises_autherror():
+    def handler(req):
+        return httpx.Response(401, json={"detail": "nope"})  # token endpoint rejects
+
+    plugin = OAuth2Auth(token_url="/oauth/token", grant="client_credentials", client_id="svc", client_secret="bad")
+
+    async def run():
+        async with _client(handler) as c:
+            await plugin.authenticate(c)
+
+    with pytest.raises(AuthError):
+        asyncio.run(run())
 
 
 # --- bearer ----------------------------------------------------------------

@@ -46,6 +46,20 @@ def test_missing_api_key_env_is_warned():
     assert any("ALICE_KEY" in w for w in report.warnings)
 
 
+def test_missing_oauth2_secret_env_is_warned():
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://127.0.0.1:8000", "allow": ["127.0.0.1"]},
+            "identities": [
+                {"id": "svc", "auth": {"type": "oauth2", "token_url": "/oauth/token", "grant": "client_credentials", "client_id": "svc", "client_secret_env": "SVC_SECRET"}}
+            ],
+        }
+    )
+    report = lint(cfg, env={})
+    assert report.ok  # still just a warning
+    assert any("SVC_SECRET" in w for w in report.warnings)
+
+
 def test_dependency_cycle_is_an_error():
     cfg = Config.model_validate(
         {
