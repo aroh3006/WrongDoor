@@ -131,6 +131,40 @@ HAR: recorded credentials are secrets and usually stale, but decisively a HAR
 captures only ONE identity while the differential method needs two or more — so
 auth stays config-based and recorded Authorization/Cookie headers are ignored.
 
+### Mass-assignment (D4) is update-based and reuses the ledger as a before/after baseline
+Mass-assignment (OWASP API3) asks a different question than BOLA — "can the owner
+SET a field they shouldn't control?" — but it reuses the same "ground truth by
+construction" trick. The seeder already captured each object's canonical body
+*before* any attack, so that is a free ground-truth baseline: the prober PATCHes/
+PUTs the object AS ITS OWNER (legitimate rights to update — the only question is
+whether the body may set a protected field), injecting one declared value chosen
+to differ from the baseline, then RE-READS the object and confirms from the
+persisted state (a 2xx on the update proves nothing — the field may be silently
+stripped). So confirmation stays at BOLA's bar (a before/after differential on an
+object with known ground truth); only *which* fields are off-limits is config
+(`resources.<type>.protected_fields`, a field→illegitimate-value map), because that
+is policy the tool cannot infer. The value is carried (not just the name) so it is
+type-correct — a rejection is then an authorization refusal, not a validation error.
+Update-based is the first cut (it needs a PUT/PATCH op) because it creates no new
+objects and gets the baseline for free; create-based mass-assignment is deferred.
+Because it writes, D4 runs ONLY under `--include-mutations` AND only for resources
+that declare `protected_fields` — a double opt-in — and, running after the BOLA
+matrix is judged, its mutations can't perturb those verdicts.
+
+### D4 adds sibling functions rather than bending judge() / confirm_leak()
+The decision lives in a pure `judge_injection` beside `judge`, and the body check
+in a `confirm_injection` beside `confirm_leak` — not new branches inside them.
+`judge` is pure of `(request, observed, ledger)` and can't see the second
+observation D4 needs (the re-read) or the injected value; `confirm_leak` proves a
+*whole-object* containment claim while mass-assignment is a *field-level* claim
+("this one field took my value, and it changed from the baseline"). Keeping the
+flagship BOLA path untouched keeps its regression risk at zero; the new pure
+functions stay just as testable, and `confirm_injection` still shares diff.py's
+dict-only / equality / `_MISSING` discipline (and `normalize` is reused to strip
+volatile fields off the re-submitted body). Severity gets one `massassign` bump on
+top of the existing mutation bump — self-escalation of a server-controlled field is
+high-impact — so a high-sensitivity resource lands at Critical.
+
 ### prance for spec parsing; openapi-core deferred
 `$ref` resolution is a solved, subtle problem — we don't reimplement it. openapi-core
 (request/response *validation*) isn't needed yet, so it's held until a phase does.
