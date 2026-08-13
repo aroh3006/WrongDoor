@@ -72,3 +72,35 @@ def confirm_leak(
             return None  # a field is missing or differs -> containment broken
 
     return sorted(canonical.keys())  # every owner field matched -> the evidence
+
+
+def confirm_injection(
+    readback_body: Any,
+    field: str,
+    injected_value: Any,
+    baseline_value: Any = _MISSING,
+) -> bool:
+    """Confirm a mass-assignment (D4): did injecting ``field=injected_value`` into an
+    update actually take, as seen in the owner's re-read of the object?
+
+    A sibling of ``confirm_leak`` — same dict-only / equality / ``_MISSING``
+    discipline — but a *field-level* claim (one field took our value) rather than
+    the whole-object containment ``confirm_leak`` proves. Returns ``True`` only
+    when we can attribute the change to our injection:
+
+      * the re-read is an object (dict) — else we cannot decide (conservative);
+      * ``readback[field] == injected_value`` — the field is present AND holds the
+        exact value we tried to set (not stripped, not coerced to something else);
+      * when a ground-truth ``baseline_value`` is known (the value the field held
+        BEFORE the injection, from the ledger's canonical body), the injected
+        value must actually DIFFER from it — otherwise the field would read as our
+        value even if the server ignored us and it merely already had that value.
+    """
+    if not isinstance(readback_body, dict):
+        return False  # can only decide on an object body
+    present = readback_body.get(field, _MISSING)
+    if present is _MISSING or present != injected_value:
+        return False  # field absent, or not our value -> the server stripped/ignored it
+    if baseline_value is not _MISSING and injected_value == baseline_value:
+        return False  # equals the pre-existing value -> can't attribute the change to us
+    return True
