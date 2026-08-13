@@ -14,7 +14,7 @@ Two security properties are worth calling out:
   (§13). The identity manager resolves these names at auth time.
 """
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -159,10 +159,16 @@ class SeedingConfig(BaseModel):
 
 
 class ResourceConfig(BaseModel):
-    """Per-resource risk inputs (§9). Drives deterministic severity scoring."""
+    """Per-resource risk inputs (§9) and mass-assignment policy (D4)."""
 
     model_config = ConfigDict(extra="forbid")
     sensitivity: Literal["low", "medium", "high"] = "medium"
+    # Mass-assignment (D4): field name -> the illegitimate value the detector tries
+    # to set via an update. Which fields a client must NOT control is policy the
+    # tool can't infer, so it's declared here (like `sensitivity`). The VALUE is
+    # chosen type-correct so a rejection is an authz refusal, not a validation
+    # error — e.g. {role: admin, is_verified: true}. Empty => D4 skips this resource.
+    protected_fields: dict[str, Any] = Field(default_factory=dict)
 
 
 class DetectorsConfig(BaseModel):

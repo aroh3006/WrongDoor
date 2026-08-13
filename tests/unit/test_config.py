@@ -204,6 +204,25 @@ def test_loader_invalid_yaml(tmp_path):
         load_config(p)
 
 
+def test_protected_fields_parse_and_default_empty():
+    cfg = Config.model_validate(_valid_dict())
+    # A resource not listed (or listed without protected_fields) defaults to none.
+    assert cfg.resources == {}
+
+    d = _valid_dict()
+    d["resources"] = {"profiles": {"sensitivity": "high", "protected_fields": {"role": "admin", "is_verified": True}}}
+    cfg2 = Config.model_validate(d)
+    pf = cfg2.resources["profiles"].protected_fields
+    assert pf == {"role": "admin", "is_verified": True}  # values keep their JSON type
+
+
+def test_protected_fields_reject_unknown_resource_key():
+    d = _valid_dict()
+    d["resources"] = {"profiles": {"protected_feilds": {"role": "admin"}}}  # typo'd key
+    with pytest.raises(ValidationError):  # extra="forbid" catches the typo
+        Config.model_validate(d)
+
+
 def test_seeding_defaults_and_override():
     cfg = Config.model_validate(_valid_dict())
     assert cfg.seeding.max_objects == 100 and cfg.seeding.id_field is None
