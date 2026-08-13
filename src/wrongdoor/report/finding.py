@@ -14,9 +14,11 @@ from ..engine.verdict import Judgment, Verdict
 from ..explain import (
     explain_bfla,
     explain_bola,
+    explain_mass_assignment,
     explain_missing_auth,
     remediate_bfla,
     remediate_bola,
+    remediate_mass_assignment,
     remediate_missing_auth,
 )
 from ..risk import Severity, score
@@ -94,6 +96,14 @@ def build_findings(judgments: list[Judgment], config: Config) -> list[Finding]:
             fingerprint = f"WD-BFLA-{req.operation_id}-{rt}"
             explanation = explain_bfla(actor, actor_tenant, req.method, req.operation_id)
             remediation = remediate_bfla(req.method, req.operation_id)
+        elif req.check == "massassign":
+            finding_type = "MASS_ASSIGNMENT"
+            actor = req.acting_identity  # the injector is also the object's owner
+            actor_tenant = id_attrs.get(actor, {}).get("tenant")
+            field = matched[0] if matched else "?"  # judge_injection records the confirmed field
+            fingerprint = f"WD-MASSASSIGN-{req.operation_id}-{rt}-{field}"
+            explanation = explain_mass_assignment(actor, actor_tenant, rt, oid, req.method, req.operation_id, field)
+            remediation = remediate_mass_assignment(rt, req.method, req.operation_id, field)
         elif req.check == "unauth" or req.acting_identity == ANONYMOUS_ID:
             finding_type = "MISSING_AUTH"
             actor, actor_tenant = "anonymous", None

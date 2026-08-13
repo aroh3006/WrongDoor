@@ -60,6 +60,9 @@ def score(
     if judgment.request.check == "bfla":
         band = _bump(band)  # a privileged function reachable by the under-privileged
 
+    if judgment.request.check == "massassign":
+        band = _bump(band)  # a client assigned a server-controlled field (on top of the mutation bump)
+
     return band
 
 

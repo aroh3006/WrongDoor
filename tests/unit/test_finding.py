@@ -136,6 +136,70 @@ def test_unauthenticated_violation_becomes_missing_auth_finding():
     assert "unauthenticated" in f.explanation.lower()
 
 
+def test_mass_assignment_violation_becomes_finding():
+    req = PlannedRequest(
+        acting_identity="alice",
+        method="PATCH",
+        path="/profiles/1000",
+        operation_id="updateProfile",
+        target=ObjectRef("profiles", "1000"),
+        expected=Expectation.DENY,
+        is_mutation=True,
+        check="massassign",
+    )
+    j = Judgment(
+        verdict=Verdict.VIOLATION,
+        reason="confirmed mass-assignment",
+        request=req,
+        observed=ObservedResponse(status=200, body={"id": 1000, "role": "admin"}),
+        owner="alice",  # the injector owns the object
+        matched_fields=("role",),
+    )
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://t", "allow": ["t"]},
+            "identities": [{"id": "alice", "attributes": {"tenant": "A"}, "auth": {"type": "bearer", "token_env": "A"}}],
+            "resources": {"profiles": {"sensitivity": "high", "protected_fields": {"role": "admin"}}},
+        }
+    )
+    f = build_findings([j], cfg)[0]
+    assert f.finding_type == "MASS_ASSIGNMENT"
+    assert f.actor == "alice" and f.owner == "alice"  # self-escalation
+    assert f.fingerprint == "WD-MASSASSIGN-updateProfile-profiles-role"
+    # high sensitivity -> mutation bump -> massassign bump, clamped at CRITICAL
+    assert f.severity is Severity.CRITICAL
+    assert "'role'" in f.explanation and "mass-assignment" in f.explanation.lower()
+    assert "allowlist" in f.remediation.lower()
+
+
+def test_mass_assignment_low_sensitivity_is_high():
+    req = PlannedRequest(
+        acting_identity="alice",
+        method="PATCH",
+        path="/prefs/1",
+        operation_id="updatePrefs",
+        target=ObjectRef("prefs", "1"),
+        expected=Expectation.DENY,
+        is_mutation=True,
+        check="massassign",
+    )
+    j = Judgment(
+        verdict=Verdict.VIOLATION, reason="x", request=req,
+        observed=ObservedResponse(status=200, body={"id": 1, "theme": "x"}),
+        owner="alice", matched_fields=("theme",),
+    )
+    cfg = Config.model_validate(
+        {
+            "target": {"base_url": "http://t", "allow": ["t"]},
+            "identities": [{"id": "alice", "auth": {"type": "bearer", "token_env": "A"}}],
+            "resources": {"prefs": {"sensitivity": "low", "protected_fields": {"theme": "x"}}},
+        }
+    )
+    f = build_findings([j], cfg)[0]
+    # low(1) + mutation bump(2) + massassign bump(3) = HIGH
+    assert f.severity is Severity.HIGH
+
+
 def test_bfla_violation_becomes_bfla_finding():
     req = PlannedRequest(
         acting_identity="bob",

@@ -76,3 +76,30 @@ def remediate_bfla(method: str, operation_id: str) -> str:
         f"Enforce a role/privilege check on {method} {operation_id}: verify the caller holds the "
         f"required role and return 403 otherwise."
     )
+
+
+def explain_mass_assignment(
+    actor: str,
+    actor_tenant: str | None,
+    resource_type: str,
+    object_id: str,
+    method: str,
+    operation_id: str,
+    field: str,
+) -> str:
+    who = f"identity {actor!r}" + (f" (tenant {actor_tenant})" if actor_tenant else "")
+    return (
+        f"{who} set the protected field {field!r} on their own {resource_type}/{object_id} "
+        f"via {method} {operation_id} — a field a client should not control. A re-read as the "
+        f"owner confirmed the value persisted, confirming a mass-assignment (Broken Object "
+        f"Property Level Authorization) flaw."
+    )
+
+
+def remediate_mass_assignment(resource_type: str, method: str, operation_id: str, field: str) -> str:
+    return (
+        f"Do not bind the whole request body to the {resource_type} model on {method} "
+        f"{operation_id}: allowlist only client-settable fields and reject or ignore "
+        f"{field!r} from the body (e.g. a write-DTO / explicit field mapping), so a client "
+        f"cannot assign server-controlled fields."
+    )

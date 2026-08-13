@@ -60,6 +60,25 @@ def test_bumps_clamp_at_critical():
     assert score(_judgment(is_mutation=True), _CROSS, _HIGH) is Severity.CRITICAL
 
 
+def test_massassign_gets_mutation_and_massassign_bumps():
+    req = PlannedRequest(
+        acting_identity="alice",
+        method="PATCH",
+        path="/invoices/1",
+        operation_id="op",
+        target=ObjectRef("invoices", "1"),
+        expected=Expectation.DENY,
+        is_mutation=True,
+        check="massassign",
+    )
+    j = Judgment(verdict=Verdict.VIOLATION, reason="x", request=req,
+                 observed=ObservedResponse(status=200, body={}), owner="alice", matched_fields=("role",))
+    # low(1) + mutation(2) + massassign(3) = HIGH; self-escalation so no cross-tenant bump.
+    assert score(j, _SAME, _LOW) is Severity.HIGH
+    # high(3) + mutation(4) + massassign -> clamp CRITICAL.
+    assert score(j, _SAME, _HIGH) is Severity.CRITICAL
+
+
 def test_severity_is_ordered():
     assert Severity.CRITICAL > Severity.HIGH > Severity.MEDIUM > Severity.LOW
 
