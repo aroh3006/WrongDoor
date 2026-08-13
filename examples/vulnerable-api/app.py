@@ -357,3 +357,61 @@ def get_order(order_id: int, authorization: str | None = Header(default=None)) -
     if order is None:
         raise HTTPException(status_code=404, detail="not found")
     return order
+
+
+# --- profiles: PLANTED MASS-ASSIGNMENT (D4) + a protected control field ------
+# A user can update their OWN profile (owner-checked PATCH), but the handler
+# blindly binds a whitelist that WRONGLY includes `role`: so PATCHing your own
+# profile with {"role": "admin"} escalates you (the planted bug). `locked` is NOT
+# bindable from the body (the control) — an attempt to set it is silently ignored,
+# so WrongDoor must report a VIOLATION on `role` and a PASS on `locked`.
+# GET/PATCH are both owner-checked, so profiles yields NO BOLA/unauth findings.
+_PROFILES: dict[int, dict] = {}
+_PROFILE_BINDABLE = {"role", "bio"}  # role should NOT be here — that's the bug
+
+
+class ProfileIn(BaseModel):
+    bio: str = ""
+
+
+@app.post("/profiles", status_code=201)
+def create_profile(body: ProfileIn, authorization: str | None = Header(default=None)) -> dict:
+    global _next_id
+    user = _require_user(authorization)
+    profile = {
+        "id": _next_id,
+        "owner": user,
+        "tenant": _USERS[user]["tenant"],
+        "role": "user",  # server-controlled default; a client must not be able to set it
+        "locked": False,  # server-controlled; the protected control field
+        "bio": body.bio,  # the one legitimately client-settable field
+    }
+    _PROFILES[_next_id] = profile
+    _next_id += 1
+    return profile
+
+
+@app.get("/profiles/{profile_id}")
+def get_profile(profile_id: int, authorization: str | None = Header(default=None)) -> dict:
+    user = _require_user(authorization)
+    profile = _PROFILES.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if profile["owner"] != user:  # owner-checked read -> no BOLA here
+        raise HTTPException(status_code=403, detail="forbidden")
+    return profile
+
+
+@app.patch("/profiles/{profile_id}")
+async def update_profile(profile_id: int, request: Request, authorization: str | None = Header(default=None)) -> dict:
+    user = _require_user(authorization)
+    profile = _PROFILES.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if profile["owner"] != user:  # you may only update your OWN profile
+        raise HTTPException(status_code=403, detail="forbidden")
+    body = await request.json()
+    for key, value in body.items():
+        if key in _PROFILE_BINDABLE:  # blind bind: `role` slips through -> mass-assignment
+            profile[key] = value
+    return profile

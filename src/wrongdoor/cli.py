@@ -21,6 +21,7 @@ from .banner import print_banner
 from .config.loader import ConfigError, load_config
 from .config.schema import Config
 from .engine.executor import execute
+from .engine.massassign import probe_mass_assignment
 from .engine.planner import ANONYMOUS_ID, plan_bfla, plan_matrix
 from .engine.seeder import CleanupOutcome, SeedOutcome
 from .engine.seeder import cleanup as cleanup_objects
@@ -312,6 +313,13 @@ async def _run_pipeline(
         planned += plan_bfla(operations, identity_attrs, cfg.operations)
         results = await execute(planned, registry)
         judgments = judge_all(results, outcome.ledger)
+        if include_mutations:
+            # D4 mass-assignment writes (PATCH/PUT), so it rides the same
+            # opt-in as the other mutations. It runs AFTER the BOLA matrix is
+            # judged, so mutating the seeded objects can't affect those verdicts.
+            judgments += await probe_mass_assignment(
+                cfg, registry, operations, guard, outcome.ledger
+            )
         if cleanup:
             # Evidence is already captured (the judgments + the ledger's canonical
             # bodies), so deleting now can't change the result. Owners still hold
