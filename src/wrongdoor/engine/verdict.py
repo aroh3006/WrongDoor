@@ -18,11 +18,14 @@ Four honest states (never collapse them):
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
-from .diff import confirm_leak
+from .diff import confirm_injection, confirm_leak
 from .executor import ObservedResponse
 from .ledger import OwnershipLedger
 from .planner import Expectation, PlannedRequest
+
+_NO_BASELINE = object()  # sentinel: the field had no known value before the injection
 
 
 class Verdict(Enum):
@@ -105,6 +108,73 @@ def judge(
         return result(Verdict.INCONCLUSIVE, "2xx to non-owner but no body match — needs review")
 
     return result(Verdict.INCONCLUSIVE, f"unexpected status {status}")
+
+
+def judge_injection(
+    request: PlannedRequest,
+    field: str,
+    injected_value: Any,
+    readback_body: Any,
+    baseline_value: Any = _NO_BASELINE,
+    *,
+    update_status: int,
+) -> Judgment:
+    """The mass-assignment (D4) oracle — a PURE sibling of ``judge``.
+
+    ``judge`` decides BOLA from (attack response, ledger); this decides
+    mass-assignment from (the update's status, the owner's re-read, the field's
+    pre-injection baseline). Like ``judge`` it does no I/O — the prober performs
+    the update and the re-read, then hands the bodies here — so the decision stays
+    trivially testable and can't be an injection vector.
+
+    ``observed`` is recorded as the UPDATE attempt's status paired with the owner's
+    re-read body: the status is the attack's HTTP result, the body is the
+    confirming evidence (the persisted object), so one object serves both the
+    reproducible-attack line and ``--include-bodies``.
+
+    Four honest states, decided by the PERSISTED state (a 2xx on the update alone
+    proves nothing — the field may have been silently stripped):
+      * value already equalled the baseline, or a 5xx, or the object can't be
+        re-read  -> INCONCLUSIVE (nothing was actually tested / can't confirm);
+      * the field now holds our injected value (and it changed)  -> VIOLATION;
+      * the field was stripped / ignored  -> PASS.
+    """
+    observed = ObservedResponse(status=update_status, body=readback_body)
+    owner = request.acting_identity  # the injector owns the object it is updating
+
+    def result(verdict: Verdict, reason: str, matched: tuple[str, ...] = ()) -> Judgment:
+        return Judgment(
+            verdict=verdict,
+            reason=reason,
+            request=request,
+            observed=observed,
+            owner=owner,
+            matched_fields=matched,
+        )
+
+    has_baseline = baseline_value is not _NO_BASELINE
+    if has_baseline and injected_value == baseline_value:
+        return result(
+            Verdict.INCONCLUSIVE,
+            f"probe value for {field!r} equals its current value — nothing tested",
+        )
+    if 500 <= update_status < 600:
+        return result(Verdict.INCONCLUSIVE, f"server error on update (HTTP {update_status})")
+    if not isinstance(readback_body, dict):
+        return result(Verdict.INCONCLUSIVE, "could not re-read the object to confirm")
+
+    confirmed = (
+        confirm_injection(readback_body, field, injected_value, baseline_value)
+        if has_baseline
+        else confirm_injection(readback_body, field, injected_value)
+    )
+    if confirmed:
+        return result(
+            Verdict.VIOLATION,
+            f"confirmed mass-assignment: the client set the protected field {field!r}",
+            (field,),
+        )
+    return result(Verdict.PASS, f"protected field {field!r} was not accepted (stripped/ignored)")
 
 
 def judge_all(

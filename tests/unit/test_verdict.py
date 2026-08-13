@@ -4,7 +4,13 @@ triples, no network. This is the four-state logic nailed in isolation."""
 from wrongdoor.engine.executor import ObservedResponse
 from wrongdoor.engine.ledger import ObjectRef, OwnershipLedger
 from wrongdoor.engine.planner import Expectation, PlannedRequest
-from wrongdoor.engine.verdict import Verdict, findings, judge, judge_all
+from wrongdoor.engine.verdict import (
+    Verdict,
+    findings,
+    judge,
+    judge_all,
+    judge_injection,
+)
 
 _CANON = {"id": 1000, "owner": "alice", "amount": 500}
 
@@ -100,6 +106,80 @@ def test_bfla_success_is_violation_without_a_ledger_object():
 
 def test_bfla_denied_is_pass():
     assert judge(_bfla_req(), _obs(403), OwnershipLedger()).verdict is Verdict.PASS
+
+
+# --- mass-assignment oracle (D4) -------------------------------------------
+def _massassign_req(actor="alice"):
+    return PlannedRequest(
+        acting_identity=actor,
+        method="PATCH",
+        path="/profiles/1000",
+        operation_id="updateProfile",
+        target=ObjectRef("profiles", "1000"),
+        expected=Expectation.DENY,
+        is_mutation=True,
+        check="massassign",
+    )
+
+
+def test_massassign_field_stuck_is_violation():
+    j = judge_injection(
+        _massassign_req(), "role", "admin",
+        readback_body={"id": 1000, "role": "admin"}, baseline_value="user", update_status=200,
+    )
+    assert j.verdict is Verdict.VIOLATION
+    assert j.matched_fields == ("role",)
+    assert j.owner == "alice"  # the injector owns the object it mutated
+
+
+def test_massassign_field_stripped_is_pass():
+    j = judge_injection(
+        _massassign_req(), "role", "admin",
+        readback_body={"id": 1000, "role": "user"}, baseline_value="user", update_status=200,
+    )
+    assert j.verdict is Verdict.PASS
+
+
+def test_massassign_rejected_update_but_field_unchanged_is_pass():
+    # The update returned 4xx AND the re-read shows the field never changed -> PASS.
+    j = judge_injection(
+        _massassign_req(), "role", "admin",
+        readback_body={"id": 1000, "role": "user"}, baseline_value="user", update_status=403,
+    )
+    assert j.verdict is Verdict.PASS
+
+
+def test_massassign_value_equals_baseline_is_inconclusive():
+    j = judge_injection(
+        _massassign_req(), "verified", True,
+        readback_body={"id": 1000, "verified": True}, baseline_value=True, update_status=200,
+    )
+    assert j.verdict is Verdict.INCONCLUSIVE
+
+
+def test_massassign_unreadable_object_is_inconclusive():
+    j = judge_injection(
+        _massassign_req(), "role", "admin",
+        readback_body="Forbidden", baseline_value="user", update_status=200,
+    )
+    assert j.verdict is Verdict.INCONCLUSIVE
+
+
+def test_massassign_server_error_is_inconclusive():
+    j = judge_injection(
+        _massassign_req(), "role", "admin",
+        readback_body={"id": 1000, "role": "admin"}, baseline_value="user", update_status=500,
+    )
+    assert j.verdict is Verdict.INCONCLUSIVE
+
+
+def test_massassign_confirmed_without_a_baseline():
+    # No baseline known (field was absent before) but the client introduced it.
+    j = judge_injection(
+        _massassign_req(), "role", "admin",
+        readback_body={"id": 1000, "role": "admin"}, update_status=200,
+    )
+    assert j.verdict is Verdict.VIOLATION
 
 
 def test_judge_all_and_findings():
