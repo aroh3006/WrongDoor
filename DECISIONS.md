@@ -1,174 +1,122 @@
 # Design decisions
 
-One short paragraph per real choice — the "why", so it can be defended later.
+One short paragraph for each real decision made in this project. Each one explains the why. That way it's easy to defend later.
 
 ### Dynamic differential testing, not a static model
-WrongDoor runs against a live target, creates data as each identity, and tries to
-reach it as another. A static "who-should-own-what" YAML only proves the *model*
-is self-consistent, not that the *app* is — and model-vs-reality drift is exactly
-what causes authorization bugs. So we measure reality.
+WrongDoor runs against a live target. It creates data as each identity. Then it tries to reach that data as another identity.
+
+A static "who-should-own-what" YAML file only proves the *model* is self-consistent. It doesn't prove the *app* is. The gap between the model and the real app is exactly what causes authorization bugs. So instead of trusting a model, we measure the real thing.
 
 ### Ground truth by construction (the seeder)
-Because the seeder *creates* each object as a known identity, ownership is a fact,
-not a guess. That is what lets the verdict engine *confirm* a leak instead of
-inferring one from response similarity (which is noisy and limited to ~2 identities).
+The seeder creates each object as a known identity. That makes ownership a fact, not a guess. This is what lets the verdict engine *confirm* a leak instead of inferring one from how similar two responses look. Inferring from similarity is noisy. It also only works well with about two identities.
 
 ### The ownership ledger keys on (resource_type, object_id)
-Real APIs reuse small ids across types (`invoice/1` and `user/1` both exist), so a
-bare-id key would cross-wire ownership. object_id is normalized to a string because
-JSON returns `1` or `"1"` inconsistently.
+Real APIs reuse small ids across types. `invoice/1` and `user/1` can both exist at the same time. A bare id key would cross-wire ownership between them, so the key is `(resource_type, object_id)` instead. object_id always gets normalized to a string. JSON returns `1` or `"1"` inconsistently for the same id, and that would otherwise cause mismatches.
 
 ### Ledger ownership is write-once; conflicts raise
-Recording the same object with a *different* owner can only mean the target handed
-two identities the same id (an anomaly) or a seeder bug — either would poison every
-verdict — so it raises `LedgerError` rather than silently overwriting ground truth.
+If the same object gets recorded with a *different* owner, something is wrong. Either the target handed two identities the same id (an anomaly), or there's a bug in the seeder. Either way, every verdict after that point would be poisoned. So instead of silently overwriting ground truth, this raises `LedgerError`.
 
 ### The verdict engine is a pure function with four states
-`judge(request, response, ledger)` has no I/O, so it is trivially testable and can't
-be an injection vector. It never collapses PASS / VIOLATION / BROKEN / INCONCLUSIVE:
-a `500` is inconclusive, an owner denied is BROKEN (a bug, never a security "pass"),
-and a `2xx` to a non-owner is only a VIOLATION once the body matches ground truth.
+`judge(request, response, ledger)` does no I/O. That makes it trivially testable. It also means it can't become an injection vector.
+
+It never collapses the four states into fewer. A `500` is always INCONCLUSIVE. An owner getting denied is always BROKEN (a bug, never a security "pass"). A `2xx` to a non-owner only counts as a VIOLATION once the body actually matches ground truth.
 
 ### A 2xx alone is never a leak; a 404 to a non-owner is a PASS
-A leaked object returns a perfectly valid `200`, and a filtered/empty `200` looks
-identical — so confirmation requires a body match. And because we *know* the object
-exists (we made it), a `404` to a non-owner is legitimate deny-by-info-hiding.
+A leaked object returns a perfectly valid `200`. A filtered or empty `200` looks exactly the same from the outside. So confirming a leak requires actually matching the body, not just checking the status code.
+
+We *know* the object exists, since we created it ourselves. So a `404` to a non-owner isn't suspicious. It's a legitimate way of denying access without revealing that the object exists.
 
 ### Body-diff uses containment, not equality
-A real response carries extra server-added fields, so we require the owner's whole
-(non-volatile) object to be *contained* in the response, not equal to it. Full
-containment is what discriminates a true leak from a coincidental overlap of a
-couple of default fields; a near-miss (same shape, different values) fails.
+A real response usually carries extra fields the server adds on its own. So instead of requiring the response to *equal* the owner's object, we require it to *contain* the owner's whole non-volatile object. Full containment is what tells a true leak apart from a coincidental overlap of a couple of default fields. A near-miss (same shape, different values) still fails.
 
 ### BFLA is status-based; BOLA and missing-auth are body-matched
-Broken function-level authorization is about reaching an operation at all, so a
-non-privileged `2xx` is the finding — there's no object to match. BOLA and
-missing-auth are object-level, so they require the body match against ground truth.
+Broken function-level authorization is about reaching an operation at all. There's no object to match. A non-privileged `2xx` response is itself the finding.
+
+BOLA and missing-auth work differently. They are object-level checks, so they need the body to actually match against ground truth.
 
 ### The safety guard fails closed and matches hostnames exactly
-Anything ambiguous is a refusal. Host matching is exact equality on the parsed
-hostname — never a substring or `endswith`, which is how allowlists get bypassed
-(`staging.myapp.test.evil.com`). It raises rather than returning a bool a caller
-could forget to check.
+Anything ambiguous gets refused. Host matching uses exact equality on the parsed hostname. It's never a substring check or `endswith`, because that's exactly how allowlists get bypassed (for example, `staging.myapp.test.evil.com`). The guard also raises an error instead of returning a true/false value. A caller could too easily forget to check a returned bool.
 
 ### Mutations are off by default; the seeder is sequential and bounded
-The flagship BOLA sweep is reads-only unless `--include-mutations` is passed (§13).
-Seeding issues writes, so it is sequential (not concurrent like auth) and capped by
-`max_objects`, so a bad config can't create a runaway amount of data.
+The main BOLA sweep only reads data, unless `--include-mutations` is passed (§13). Seeding does issue writes though. Because of that, seeding runs sequentially instead of concurrently, unlike auth, which runs concurrently. Seeding is also capped by `max_objects`. That way a bad config can't accidentally create a huge amount of data.
 
 ### Secrets live only in the identity layer; reports redact by default
-Secrets are referenced by env-var *name* in the config and resolved only in
-`identity/`, never logged. Reports emit matched field *names*; response values
-appear only behind `--include-bodies`, and the HTML report autoescapes everything.
+The config only ever references secrets by env-var *name*. The actual value gets resolved only inside `identity/`. It's never logged.
 
-### API-key auth is header-only, and redaction follows the configured header
-The `api_key` auth type sends the key in a header (default `X-API-Key`, but the
-header name is configurable because APIs disagree) — never a URL query string, so
-a key can't leak into a logged URL (§13). Because the header name is known at
-config time, each plugin declares the secret header it sets and that travels with
-the `AuthedClient`, so `redacted()` masks the *configured* header, not just a
-hardcoded default — redaction stays correct even for a custom header name.
+Reports only emit the *names* of matched fields, not the values. Actual response values only show up if you pass `--include-bodies`. The HTML report also autoescapes everything it renders.
 
-### OAuth2 is an httpx.Auth, and refresh is serialized to avoid a stampede
-OAuth2 is the one auth type that must act on every request, not set a header once
-— a token can expire mid-run, so we have to see the 401 and re-issue. httpx's own
-extension point for that is `httpx.Auth.async_auth_flow` (yield request, inspect
-response, yield a retry), so the plugin *is* an `httpx.Auth` rather than bolting
-retry logic onto the set-header-once pattern. Because the executor is concurrent,
-a just-expired token can 401 many in-flight requests at once; refresh runs under a
-lock with a staleness check (`refresh only if the token is still the one that just
-failed`) so the first arrival refreshes and the rest reuse the new token instead
-of stampeding the token endpoint. When the server issues no refresh token
-(common for client-credentials), refresh falls back to re-running the grant.
+### API-key auth is header-only (redaction follows the configured header)
+The `api_key` auth type always sends the key in a header. The default header is `X-API-Key`, but the header name can be configured, since different APIs use different conventions. The key never goes into a URL query string. That way it can't leak into a logged URL (§13).
+
+The header name is known at config time, so each auth plugin declares which header it puts the secret in. That information travels along with the `AuthedClient`. So `redacted()` can mask the actual *configured* header, not just a hardcoded default. Redaction stays correct even with a custom header name.
+
+### OAuth2 is an httpx.Auth (refresh is serialized to avoid a stampede)
+OAuth2 is the one auth type that has to act on every single request, instead of just setting a header once. A token can expire in the middle of a run. When that happens, we need to see the 401 and re-issue the request with a fresh token.
+
+httpx has a built-in extension point for exactly this: `httpx.Auth.async_auth_flow`. It yields a request, inspects the response, and can yield a retry. So instead of bolting retry logic onto the normal set-header-once pattern, the OAuth2 plugin *is* an `httpx.Auth`.
+
+The executor runs requests concurrently. That means a token expiring can cause many in-flight requests to 401 at almost the same time. To handle that, refresh runs under a lock with a staleness check: only refresh if the token is still the one that just failed. The first request to hit this refreshes the token. The rest just reuse the new one, instead of all hammering the token endpoint at once.
+
+If the server doesn't issue a refresh token (this is common with client-credentials), the refresh step just re-runs the original grant instead.
 
 ### Config errors are rendered from field locations, never the input value
-`extra="forbid"` rejects an inline secret — but pydantic's default error string
-embeds `input_value=...`, which would print the very secret it caught. So the
-loader builds the message from each error's `loc` (field path) and `msg` only,
-never `input` — the guard names the offending field without echoing its value.
+`extra="forbid"` correctly rejects an inline secret. But pydantic's default error message embeds `input_value=...`, which would print out the exact secret it just caught. That's a problem. So the loader builds its own error message using only each error's `loc` (the field path) and `msg`. It never uses `input`. This way the error can name the offending field without ever echoing its value.
 
 ### Credential-POST endpoints are allowlist-checked, not just base_url
-The host allowlist gated `base_url` and every write, but a `login` url or an
-`oauth2` `token_url` is where credentials actually get POSTed — and an absolute
-off-allowlist URL there would exfiltrate them past the base_url check. Each plugin
-now declares its `auth_urls`, and the manager gates them (resolved against
-base_url) before authenticating, closing that path.
+The host allowlist already gated `base_url` and every write. But a `login` url or an `oauth2` `token_url` is where credentials actually get POSTed. An absolute, off-allowlist URL there would let credentials slip past the base_url check entirely.
+
+To close that gap, each auth plugin now declares its own `auth_urls`. The manager checks these against the allowlist (resolved against base_url) before authenticating.
 
 ### Severity is a deterministic, hand-reconstructable rubric
-`severity = f(sensitivity, cross_tenant, is_mutation, check)` — a small function of
-named factors, so a finding is "Critical because it's a cross-tenant financial GET,"
-not "the model scored 0.87." Unauthenticated and BFLA each bump one band.
+`severity = f(sensitivity, cross_tenant, is_mutation, check)`. It's a small function of named factors. This means a finding can say "Critical, because it's a cross-tenant financial GET," instead of something meaningless like "the model scored 0.87." Unauthenticated access and BFLA findings each bump the severity up by one band.
 
 ### Dependency chains: topological create-order + parent-id injection
-A child (Project) is seeded only after its parent (Org), and the parent object's id
-is injected into the child's create body — and the parent used is one the *same*
-identity owns, so ownership chains cleanly. A dependency cycle is a hard error,
-caught offline by `wrongdoor lint` (the tool's only graph traversal).
+A child resource, like Project, only gets seeded after its parent, like Org. The parent's id then gets injected into the child's create body. The parent used is always one the *same* identity owns. That's what makes ownership chain cleanly through the hierarchy.
+
+A dependency cycle is treated as a hard error. It's caught offline by `wrongdoor lint`, which is the tool's only graph traversal.
 
 ### --cleanup deletes only ledger objects, children first, best-effort
-Teardown deletes exactly what the run created — the ledger is the manifest, so
-nothing else is ever touched. Deletes go via each resource's spec DELETE op, as
-the object's owner (legitimate rights), in the reverse of the seeder's create
-order (children before parents, so a parent delete isn't blocked by a live
-child). Unlike the seeder (which aborts on a bad write, because forged ground
-truth is dangerous), cleanup is best-effort and non-fatal: it treats 404 as
-success (already gone == the goal), collects every other failure into a "deleted
-N/M; left behind […]" summary, reports resources with no DELETE op instead of
-guessing a URL, and never changes the run's exit code — a teardown hiccup must
-not mask or fake the security result.
+Teardown deletes exactly what the run created, nothing more. The ledger acts as the manifest. Because of that, nothing else on the target ever gets touched.
 
-### HAR import reuses the OpenAPI catalog, and never touches auth
-A HAR capture is a second front-end that emits the *same* `Operation` list as the
-OpenAPI importer — it reuses that importer's `Operation`/`Parameter` types and its
-`_classify`/`_resource_type` helpers, so planner/seeder/executor/verdict stay
-importer-agnostic (a `.har` and a spec are interchangeable at `--spec`, dispatched
-by extension). The one inference not in the data — literal `/invoices/1000` vs
-`/invoices/1001` being one templated op — is done by id-shape (digits / UUID /
-long hex → `{param}`), then handed to the same `_classify`. Recorded create
-bodies become `request_schema={"example": body}`, which `synthesize_body` already
-replays, so the seeder needs no change. Auth is deliberately NOT extracted from a
-HAR: recorded credentials are secrets and usually stale, but decisively a HAR
-captures only ONE identity while the differential method needs two or more — so
-auth stays config-based and recorded Authorization/Cookie headers are ignored.
+Deletes go through each resource's spec DELETE operation. They run as the object's owner, since the owner has legitimate delete rights. They also run in the reverse of the seeder's create order: children before parents. That way a parent delete never gets blocked by a still-live child.
+
+The seeder aborts on a bad write, since forged ground truth is dangerous. Cleanup works the opposite way: it's best-effort and non-fatal. A 404 counts as success, since the object already being gone is the actual goal. Every other kind of failure gets collected into a summary, something like `"deleted N/M; left behind [...]"`. If a resource has no DELETE operation, cleanup reports that instead of guessing at a URL. Cleanup also never changes the run's exit code. A teardown hiccup should never mask or fake the real security result.
+
+### HAR import reuses the OpenAPI catalog and never touches auth
+A HAR capture is basically a second front-end. It produces the exact same `Operation` list the OpenAPI importer produces. It reuses that importer's `Operation` and `Parameter` types, along with its `_classify` and `_resource_type` helpers. Because of that, the planner, seeder, executor, and verdict engine all stay importer-agnostic. A `.har` file and an OpenAPI spec are interchangeable at `--spec`. The tool just dispatches based on the file extension.
+
+There's one piece of information a HAR doesn't give us directly: whether `/invoices/1000` and `/invoices/1001` are really the same templated operation. We figure this out by shape. A segment made of digits, a UUID, or a long hex string becomes `{param}`. The result then gets handed to the same `_classify` function used for specs.
+
+Recorded create bodies become `request_schema={"example": body}`. `synthesize_body` already knows how to replay that format, so the seeder doesn't need any changes.
+
+Auth is deliberately never extracted from a HAR file. Recorded credentials are secrets. They're also usually stale by the time you'd use them anyway. More importantly, a HAR only ever captures ONE identity, and the differential method needs at least two. So auth always stays config-based. Any recorded Authorization or Cookie headers just get ignored.
 
 ### Mass-assignment (D4) is update-based and reuses the ledger as a before/after baseline
-Mass-assignment (OWASP API3) asks a different question than BOLA — "can the owner
-SET a field they shouldn't control?" — but it reuses the same "ground truth by
-construction" trick. The seeder already captured each object's canonical body
-*before* any attack, so that is a free ground-truth baseline: the prober PATCHes/
-PUTs the object AS ITS OWNER (legitimate rights to update — the only question is
-whether the body may set a protected field), injecting one declared value chosen
-to differ from the baseline, then RE-READS the object and confirms from the
-persisted state (a 2xx on the update proves nothing — the field may be silently
-stripped). So confirmation stays at BOLA's bar (a before/after differential on an
-object with known ground truth); only *which* fields are off-limits is config
-(`resources.<type>.protected_fields`, a field→illegitimate-value map), because that
-is policy the tool cannot infer. The value is carried (not just the name) so it is
-type-correct — a rejection is then an authorization refusal, not a validation error.
-Update-based is the first cut (it needs a PUT/PATCH op) because it creates no new
-objects and gets the baseline for free; create-based mass-assignment is deferred.
-Because it writes, D4 runs ONLY under `--include-mutations` AND only for resources
-that declare `protected_fields` — a double opt-in — and, running after the BOLA
-matrix is judged, its mutations can't perturb those verdicts.
+Mass-assignment (OWASP API3) asks a different question than BOLA. Instead of "can a non-owner READ my object", it asks "can the owner SET a field they shouldn't control?" It reuses the same "ground truth by construction" trick BOLA uses, just pointed at a different question.
+
+The seeder already captures each object's canonical body before any attack happens. That gives us a free ground-truth baseline. The prober PATCHes or PUTs the object as its own owner. The owner already has legitimate rights to update the object, so the only real question is whether the request body can set a field it shouldn't be able to. The prober injects one declared value chosen to be different from the baseline. Then it re-reads the object and checks the persisted state. A 2xx response on the update proves nothing by itself, since the field could have been silently stripped by the server.
+
+This keeps confirmation at the same bar as BOLA: a before/after difference on an object with known ground truth. The only thing that's config, rather than inferred, is *which* fields are off-limits. That lives in `resources.<type>.protected_fields`, a map from field name to an illegitimate value. Which fields are protected is policy, and the tool has no way to infer that on its own.
+
+The value itself gets carried along, not just the field name. That keeps the injected value type-correct, which means a rejection is a real authorization refusal, not just a validation error.
+
+This first version is update-based, since it needs a PUT or PATCH operation. It's the first cut because it doesn't create any new objects and gets its baseline for free. Create-based mass-assignment is left for later.
+
+Because this detector writes data, it only runs under `--include-mutations`. It also only runs for resources that declare `protected_fields`. That's a double opt-in. It also always runs after the BOLA matrix has already been judged. That way its mutations can't affect those earlier verdicts.
 
 ### D4 adds sibling functions rather than bending judge() / confirm_leak()
-The decision lives in a pure `judge_injection` beside `judge`, and the body check
-in a `confirm_injection` beside `confirm_leak` — not new branches inside them.
-`judge` is pure of `(request, observed, ledger)` and can't see the second
-observation D4 needs (the re-read) or the injected value; `confirm_leak` proves a
-*whole-object* containment claim while mass-assignment is a *field-level* claim
-("this one field took my value, and it changed from the baseline"). Keeping the
-flagship BOLA path untouched keeps its regression risk at zero; the new pure
-functions stay just as testable, and `confirm_injection` still shares diff.py's
-dict-only / equality / `_MISSING` discipline (and `normalize` is reused to strip
-volatile fields off the re-submitted body). Severity gets one `massassign` bump on
-top of the existing mutation bump — self-escalation of a server-controlled field is
-high-impact — so a high-sensitivity resource lands at Critical.
+The mass-assignment decision lives in a new, pure `judge_injection` function, sitting beside `judge`. The body check lives in a new `confirm_injection` function, sitting beside `confirm_leak`. Neither existing function got new branches added to it.
+
+`judge` only takes `(request, observed, ledger)`. It has no way to see the second observation D4 needs, which is the re-read, or the injected value. `confirm_leak` also proves a different kind of claim: a *whole-object* containment claim. Mass-assignment needs a *field-level* claim instead, something like "this one field took my value. It changed from the baseline."
+
+Keeping the main BOLA path untouched keeps its regression risk at zero. The new pure functions are just as testable as the old ones. `confirm_injection` still follows diff.py's existing rules. It only works with dicts. It uses equality checks. It uses the `_MISSING` sentinel like the rest of the file does. It also reuses `normalize` to strip volatile fields off the body before resubmitting it.
+
+Severity gets one extra `massassign` bump on top of the existing mutation bump. Escalating yourself using a server-controlled field is high-impact. So a high-sensitivity resource ends up landing at Critical.
 
 ### prance for spec parsing; openapi-core deferred
-`$ref` resolution is a solved, subtle problem — we don't reimplement it. openapi-core
-(request/response *validation*) isn't needed yet, so it's held until a phase does.
+`$ref` resolution is a solved but subtle problem. We don't try to reimplement it ourselves.
+
+openapi-core would handle request and response *validation*. We don't need that yet. It's held off until a later phase actually needs it.
 
 ### Banner to stderr
-The startup banner is decorative, so it prints to stderr; stdout stays clean for
-machine output (`wrongdoor run --format json | jq`).
+The startup banner is just decorative. Because of that, it prints to stderr instead of stdout. That way stdout stays clean for machine-readable output, like `wrongdoor run --format json | jq`.
