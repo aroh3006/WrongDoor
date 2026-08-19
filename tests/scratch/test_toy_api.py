@@ -55,4 +55,4 @@ def test_non_owner_cannot_get_invoice():
     resp = client.get(
         f"/invoices/{inv['id']}", headers={"Authorization": f"Bearer {_token('bob', 'bob-pw')}"}
     )
-    assert resp.status_code == 403  # correct authorization — no bug here
+    assert resp.status_code == 403  # correct authorization, no bug here

@@ -1,6 +1,6 @@
 """Unit tests for the identity manager and auth plugins (§5.5).
 
-Everything runs through httpx.MockTransport, so there is no real network — the
+Everything runs through httpx.MockTransport, so there is no real network: the
 handler stands in for the target's /login and /me endpoints.
 """
 

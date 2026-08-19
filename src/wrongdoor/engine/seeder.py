@@ -1,4 +1,4 @@
-"""Seeder (§5.6) — ground truth by construction.
+"""Seeder (§5.6): ground truth by construction.
 
 OWN THIS FILE. The seeder creates real objects as each identity and records who
 owns what into the ledger. That recorded ownership is the fact every later
@@ -15,8 +15,8 @@ Algorithm, for each create-op x each identity:
   6. record (resource_type, id) -> owner + canonical_body in the ledger.
 
 Safety posture:
-  * Sequential, not concurrent — these are writes; §13 wants conservative behavior.
-  * Bounded by ``seeding.max_objects`` — never create a runaway amount of data.
+  * Sequential, not concurrent: these are writes; §13 wants conservative behavior.
+  * Bounded by ``seeding.max_objects``: never create a runaway amount of data.
   * Skips create-ops whose path is a configured login URL (don't "seed" auth).
   * Per-object failures (non-2xx, no id) are collected and the loop continues;
     but a guard refusal (SafetyError) or a ledger conflict (LedgerError) propagate,
@@ -113,7 +113,7 @@ async def seed(
                     body[dep.body_field] = int(pid) if pid.isdigit() else pid
 
             create_url = _join(base_url, op.path_template)
-            guard.assert_allowed(create_url)  # LIVE WRITE — gate first
+            guard.assert_allowed(create_url)  # LIVE WRITE, gate first
 
             try:
                 resp = await authed.client.request(op.method, op.path_template, json=body)
@@ -132,7 +132,7 @@ async def seed(
             canonical = await _capture_canonical(
                 authed, op, object_id, resp, accesses, guard, base_url
             )
-            # record() raises LedgerError on an ownership conflict — we let it.
+            # record() raises LedgerError on an ownership conflict, we let it.
             ledger.record(op.resource_type, object_id, owner=identity_id, canonical_body=canonical)
             seeded += 1
 
@@ -151,7 +151,7 @@ async def cleanup(
     guard: SafetyGuard,
     ledger: OwnershipLedger,
 ) -> CleanupOutcome:
-    """Delete every object recorded in the ledger — and ONLY those objects.
+    """Delete every object recorded in the ledger, and ONLY those objects.
 
     This is teardown for the data ``seed()`` created; the ledger is an exact
     manifest of what WrongDoor made this run, so nothing else on the target is
@@ -163,7 +163,7 @@ async def cleanup(
     a parent delete isn't blocked by a still-present child (e.g. an org that
     still has projects).
 
-    Failure posture — deliberately the OPPOSITE of ``seed()``: seeding aborts on
+    Failure posture: deliberately the OPPOSITE of ``seed()``. Seeding aborts on
     a guard refusal or a bad create (a partial/forged ground truth is dangerous),
     but cleanup is best-effort and NEVER aborts on a single failure. It attempts
     a delete for every ledger object, treats 404 as success (already gone == the
@@ -199,8 +199,8 @@ async def _delete_one(
 ) -> str | None:
     """Delete one ledger object. Return None on success, else a left-behind note.
 
-    A guard refusal here is recorded and skipped (not raised) — cleanup must stay
-    non-fatal — but the request is still never sent, so the safety boundary holds.
+    A guard refusal here is recorded and skipped (not raised); cleanup must stay
+    non-fatal, but the request is still never sent, so the safety boundary holds.
     """
     ref = f"{entry.resource_type}/{entry.object_id}"
     if delete_op is None:
@@ -212,7 +212,7 @@ async def _delete_one(
     param = delete_op.object_id_params[0]
     path = delete_op.path_template.replace("{" + param.name + "}", entry.object_id)
     try:
-        guard.assert_allowed(_join(base_url, path))  # LIVE DELETE — gate first
+        guard.assert_allowed(_join(base_url, path))  # LIVE DELETE, gate first
     except SafetyError as e:
         return f"{ref} (refused by safety guard: {e})"
 
@@ -221,7 +221,7 @@ async def _delete_one(
     except httpx.HTTPError as e:
         return f"{ref} (request error: {e})"
     if resp.status_code // 100 == 2 or resp.status_code == 404:
-        return None  # 2xx deleted, or 404 already gone — both mean the object is gone
+        return None  # 2xx deleted, or 404 already gone: both mean the object is gone
     return f"{ref} (HTTP {resp.status_code})"
 
 
@@ -242,7 +242,7 @@ def _order_by_dependency(creates: list[Operation], deps: dict) -> list[Operation
 
 
 def _delete_order(resource_types: list[str], deps: dict) -> list[str]:
-    """Resource types in child-before-parent order — the reverse of create order.
+    """Resource types in child-before-parent order: the reverse of create order.
 
     Reuses the seeder's topological sort (parents first) and reverses it. A cycle
     is impossible here (seeding would already have raised), but we stay non-fatal
@@ -300,7 +300,7 @@ def _first_owned(ledger: OwnershipLedger, resource_type: str, identity: str):
 
 
 def _login_paths(config: Config) -> set[str]:
-    """Paths that are login endpoints — never seed these even if the spec lists them."""
+    """Paths that are login endpoints: never seed these even if the spec lists them."""
     return {
         i.auth.url for i in config.identities if isinstance(i.auth, LoginAuthConfig)
     }
@@ -360,7 +360,7 @@ async def _capture_canonical(
     if get_op is not None:
         param = get_op.object_id_params[0]
         concrete_path = get_op.path_template.replace("{" + param.name + "}", object_id)
-        guard.assert_allowed(_join(base_url, concrete_path))  # LIVE read — gate it
+        guard.assert_allowed(_join(base_url, concrete_path))  # LIVE read, gate it
         resp = await authed.client.get(concrete_path)
         if resp.status_code // 100 == 2:
             body = _json_or_none(resp)

@@ -1,1 +1,1 @@
-"""Lint: offline static sanity pass — dangling refs, cycles, typos (bonus, pre-flight)."""
+"""Lint: offline static sanity pass for dangling refs, cycles, typos (bonus, pre-flight)."""

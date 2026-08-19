@@ -1,4 +1,4 @@
-"""WrongDoor CLI (§5.1) — Phase 1 slice.
+"""WrongDoor CLI (§5.1): Phase 1 slice.
 
 Wires ConfigLoader -> SafetyGuard -> IdentityManager and prints each identity's
 response to a probe endpoint. No analysis here; that arrives in later phases.
@@ -49,7 +49,7 @@ _err = Console(stderr=True)
 
 @app.callback()
 def _startup() -> None:
-    """Runs before any subcommand — print the banner to stderr.
+    """Runs before any subcommand: print the banner to stderr.
 
     The banner is decorative, so it goes to stderr; stdout stays clean for
     machine output (e.g. `wrongdoor run --format json | jq`).
@@ -187,7 +187,7 @@ def _print_ledger(outcome: SeedOutcome) -> None:
     table.add_column("object_id", justify="right")
     table.add_column("owner")
     table.add_column("canonical fields (values redacted)")
-    for row in ledger.redacted_summary():  # redacted by default — no values printed (§13)
+    for row in ledger.redacted_summary():  # redacted by default, no values printed (§13)
         fields = row["canonical_fields"]
         fields_str = ", ".join(fields) if isinstance(fields, list) else str(fields)
         table.add_row(row["resource_type"], row["object_id"], row["owner"], fields_str)

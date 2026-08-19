@@ -1,4 +1,4 @@
-"""JUnit XML reporter — authorization as a test suite (§11).
+"""JUnit XML reporter: authorization as a test suite (§11).
 
 Each confirmed leak is a failing testcase; ``tests`` reflects the whole sweep so
 CI shows "N checks, M failures". ElementTree escapes all text (safe XML).

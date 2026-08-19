@@ -1,4 +1,4 @@
-"""Matrix Planner (§5.8) — build the list of cross-identity requests to try.
+"""Matrix Planner (§5.8): build the list of cross-identity requests to try.
 
 OWN THIS FILE. The planner decides *what gets tested*: for every object whose
 owner we know (from the ledger), it schedules an access attempt by every identity
@@ -8,7 +8,7 @@ cells) or waste requests / create noise (too many).
 Design (defensible):
 
 * Owner-only policy (Phase 3): a non-owner accessing an object is expected to be
-  DENIED. Self-owned cells are excluded — the owner using their own object is
+  DENIED. Self-owned cells are excluded: the owner using their own object is
   authorized, not a test.
 * Mutations (PUT/PATCH/DELETE) are OFF by default (§13). The flagship is BOLA via
   GET; enabling writes against a live target is opt-in (``include_mutations``),
@@ -26,7 +26,7 @@ from .ledger import ObjectRef, OwnershipLedger
 
 _MUTATION_METHODS = {"PUT", "PATCH", "DELETE"}
 
-# Reserved actor id for the unauthenticated (D3) rows — a client with no auth.
+# Reserved actor id for the unauthenticated (D3) rows: a client with no auth.
 ANONYMOUS_ID = "__anonymous__"
 
 
@@ -91,7 +91,7 @@ def plan_matrix(
                     )
                 )
 
-            # Missing auth (D3): one row from an unauthenticated caller. Reads only —
+            # Missing auth (D3): one row from an unauthenticated caller. Reads only:
             # we never fire unauthenticated writes at a target.
             if include_unauth and not is_mutation:
                 planned.append(
@@ -107,7 +107,7 @@ def plan_matrix(
                     )
                 )
 
-    # Reads before mutations (§5.8) — stable sort keeps per-object order otherwise.
+    # Reads before mutations (§5.8): stable sort keeps per-object order otherwise.
     planned.sort(key=lambda r: r.is_mutation)
     return planned
 
@@ -138,7 +138,7 @@ def plan_bfla(
                     method=op.method,
                     path=op.path_template,
                     operation_id=op.operation_id,
-                    target=ObjectRef(op.resource_type, "*"),  # no object — placeholder
+                    target=ObjectRef(op.resource_type, "*"),  # no object, placeholder
                     expected=Expectation.DENY,
                     is_mutation=op.method in _MUTATION_METHODS,
                     check="bfla",

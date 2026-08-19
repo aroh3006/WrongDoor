@@ -142,7 +142,7 @@ class OAuth2Auth(httpx.Auth):
         return httpx.Request("POST", url, data=self._refresh_params())
 
     def _apply_token_response(self, resp: httpx.Response, *, context: str) -> None:
-        # Status only — never the body or the credentials — in any error.
+        # Status only, never the body or the credentials, in any error.
         if resp.status_code // 100 != 2:
             raise AuthError(f"{context} failed: HTTP {resp.status_code}")
         try:

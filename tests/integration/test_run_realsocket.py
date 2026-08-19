@@ -1,7 +1,7 @@
 """Real-socket golden variant (the Phase 4 fold-in): run the full pipeline against
 the vulnerable demo served by uvicorn over an actual TCP port, transport=None.
 
-This complements the in-process ASGI golden test — it exercises real HTTP,
+This complements the in-process ASGI golden test: it exercises real HTTP,
 real auth round-trips, and the real network path the tool uses in production.
 A full Docker/Testcontainers variant can layer on top once the demo image
 (examples/vulnerable-api/Dockerfile) is used in CI.

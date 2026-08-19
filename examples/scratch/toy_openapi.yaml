@@ -1,6 +1,6 @@
 # OpenAPI spec for the throwaway toy API's resources (examples/scratch/toy_api.py).
-# Describes only the invoice resource — the /login endpoint is auth, configured in
-# config.yaml, not a resource to seed. Hand-written 3.0.0 for a controlled test.
+# Describes only the invoice resource (the /login endpoint is auth, configured
+# in config.yaml, not a resource to seed). Hand-written 3.0.0 for a controlled test.
 openapi: "3.0.0"
 info:
   title: WrongDoor toy API

@@ -1,4 +1,4 @@
-"""Terminal reporter (Rich) — the human-readable default for `wrongdoor run`."""
+"""Terminal reporter (Rich): the human-readable default for `wrongdoor run`."""
 
 from collections import Counter
 

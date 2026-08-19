@@ -58,7 +58,7 @@ class SafetyGuard:
 
     def __init__(self, allow: list[str], confirm_own_target: bool) -> None:
         # Normalize the allowlist once into (host, port) pairs. Entries that yield
-        # no host are dropped here — they can never match, and dropping them keeps
+        # no host are dropped here: they can never match, and dropping them keeps
         # the matching loop simple and fail-closed.
         self._allow: list[tuple[str, int | None]] = []
         for entry in allow:
@@ -86,7 +86,7 @@ class SafetyGuard:
         if not host:
             raise SafetyError(f"refusing target URL with no host: {url!r}")
 
-        # 2. Confirmation gate — the operator must assert they own / are authorized
+        # 2. Confirmation gate: the operator must assert they own / are authorized
         #    to test this target. No flag, no live requests at all.
         if not self._confirmed:
             raise SafetyError(
@@ -94,7 +94,7 @@ class SafetyGuard:
                 "you own or are authorized to test this target"
             )
 
-        # 3. Host allowlist — exact host match; if an entry pins a port, match it too.
+        # 3. Host allowlist: exact host match; if an entry pins a port, match it too.
         for allow_host, allow_port in self._allow:
             if host == allow_host and (allow_port is None or allow_port == port):
                 return  # allowed

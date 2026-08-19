@@ -5,7 +5,7 @@ authored, so we validate it into typed objects once here and trust it afterward.
 
 Two security properties are worth calling out:
 
-* ``extra="forbid"`` on every model — an unknown or typo'd key is rejected, not
+* ``extra="forbid"`` on every model: an unknown or typo'd key is rejected, not
   ignored. Crucially this makes it impossible to smuggle a raw secret inline
   (e.g. ``password: hunter2``): there is no such field, and forbidding extras
   turns the attempt into a loud validation error.
@@ -53,7 +53,7 @@ class ApiKeyAuthConfig(BaseModel):
     type: Literal["api_key"]
     key_env: str = Field(min_length=1)  # NAME of the env var holding the API key
     # Header the key rides in. Configurable because APIs disagree (X-Api-Key,
-    # Api-Key, X-Company-Token, ...). Header only — a key must never go in a URL
+    # Api-Key, X-Company-Token, ...). Header only: a key must never go in a URL
     # query string (§13), so there is deliberately no query-param option.
     header: str = Field(default="X-API-Key", min_length=1)
 
@@ -105,7 +105,7 @@ class IdentityConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1)
-    # Free-form trust attributes (e.g. tenant, role). String values — quote them
+    # Free-form trust attributes (e.g. tenant, role). String values: quote them
     # in YAML if they look numeric. Used by the policy/verdict later.
     attributes: dict[str, str] = Field(default_factory=dict)
     auth: AuthConfig
@@ -167,7 +167,7 @@ class ResourceConfig(BaseModel):
     # to set via an update. Which fields a client must NOT control is policy the
     # tool can't infer, so it's declared here (like `sensitivity`). The VALUE is
     # chosen type-correct so a rejection is an authz refusal, not a validation
-    # error — e.g. {role: admin, is_verified: true}. Empty => D4 skips this resource.
+    # error (e.g. {role: admin, is_verified: true}). Empty => D4 skips this resource.
     protected_fields: dict[str, Any] = Field(default_factory=dict)
 
 

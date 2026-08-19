@@ -4,7 +4,7 @@ Identities authenticate through the demo's real OAuth2 token endpoint (a real
 form-encoded token request, a real issued bearer token), seed an order each
 against the token-protected ``orders`` resource, and the differential sweep
 reports the planted orders BOLA. This is where the genuine integration risk
-lives — the token endpoint parsing form data and a real token working — so it is
+lives (the token endpoint parsing form data and a real token working), so it is
 tested end to end for both non-interactive grants.
 
 The 401->refresh->retry trigger is pure plugin logic and is covered

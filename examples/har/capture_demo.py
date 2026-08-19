@@ -1,4 +1,4 @@
-"""Generate examples/har/demo.har — a small, realistic HAR capture of the demo
+"""Generate examples/har/demo.har: a small, realistic HAR capture of the demo
 API's resource traffic, used as WrongDoor's HAR-import fixture.
 
 We drive the demo in-process (ASGI, no running server), authenticate for real so
@@ -8,7 +8,7 @@ import, so:
 
   * login requests are NOT recorded (the HAR is resource traffic, not auth), and
   * every recorded ``Authorization`` header is scrubbed to a placeholder before
-    writing — so the committed fixture contains no token, cookie, or password.
+    writing, so the committed fixture contains no token, cookie, or password.
 
 Regenerate with:  python examples/har/capture_demo.py
 """
@@ -71,7 +71,7 @@ async def _capture() -> list[dict]:
     async with httpx.AsyncClient(transport=transport, base_url=_BASE) as c:
         for user, pw in (("alice", "alice-pw"), ("bob", "bob-pw")):
             # Authenticate for real so the resource calls return 2xx. This login
-            # is NOT recorded into the HAR — auth is out of scope for import.
+            # is NOT recorded into the HAR (auth is out of scope for import).
             tok = (await c.post("/login", json={"username": user, "password": pw})).json()["access_token"]
             auth = {"Authorization": f"Bearer {tok}"}
 

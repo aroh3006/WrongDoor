@@ -1,8 +1,8 @@
-"""HTML reporter (§11) — one self-contained file via Jinja2.
+"""HTML reporter (§11): one self-contained file via Jinja2.
 
 Autoescaping is forced ON: response/spec-derived strings (operation ids, field
 names, bodies) are untrusted, so a value like ``<script>`` must render inert, not
-execute (§13). Redaction is still the default — bodies appear only with
+execute (§13). Redaction is still the default: bodies appear only with
 ``include_bodies``.
 """
 

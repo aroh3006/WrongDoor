@@ -1,22 +1,22 @@
-"""HAR importer (§5.4, §14 Phase 5) — recorded traffic -> the SAME operation catalog.
+"""HAR importer (§5.4, §14 Phase 5): recorded traffic -> the SAME operation catalog.
 
 A HAR file is a log of literal HTTP requests/responses: no path templates, no
 schema. This importer reconstructs the same ``Operation`` list the OpenAPI
 importer produces, so everything downstream (planner/seeder/executor/verdict) is
-importer-agnostic — it never learns whether a run came from a spec or a HAR. To
+importer-agnostic: it never learns whether a run came from a spec or a HAR. To
 guarantee that, we import the ``Operation``/``Parameter`` types and the
 ``_classify`` / ``_resource_type`` helpers straight from ``openapi`` and reuse
 them unchanged; only the front-end (literal URLs -> templates) is new here.
 
 The one inference not present in the data: turning literal paths like
 ``/invoices/1000`` and ``/invoices/1001`` into a single templated access-op
-``/invoices/{invoice_id}``. We do it by shape — a segment that looks like an
-object id (all digits, a UUID, or a long hex token) becomes ``{param}`` — then
+``/invoices/{invoice_id}``. We do it by shape: a segment that looks like an
+object id (all digits, a UUID, or a long hex token) becomes ``{param}``, then
 hand the templated path to the same ``_classify`` used for specs, so create-vs-
 access is decided identically.
 
 Auth is deliberately NOT extracted from a HAR (§13). Recorded credentials are
-secrets and usually expired, and — decisively — a HAR captures only ONE identity
+secrets and usually expired; decisively, a HAR captures only ONE identity
 while WrongDoor's differential method needs two or more. Auth stays config-based;
 recorded ``Authorization``/``Cookie`` headers are never read here.
 """
@@ -49,7 +49,7 @@ _ID_SEGMENT = re.compile(
     r")$"
 )
 
-# Obvious non-API noise a real capture is full of — skipped.
+# Obvious non-API noise a real capture is full of: skipped.
 _STATIC_SUFFIXES = (
     ".js", ".css", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".woff2", ".map",
 )
@@ -105,7 +105,7 @@ def _operation_from_entry(entry: Any) -> Operation | None:
     if not isinstance(method, str) or not isinstance(url, str):
         return None
 
-    # Only import successful traffic — a 4xx/5xx may be a probe at a non-resource.
+    # Only import successful traffic: a 4xx/5xx may be a probe at a non-resource.
     response = entry.get("response")
     status = response.get("status") if isinstance(response, dict) else None
     if not (isinstance(status, int) and 200 <= status < 300):
@@ -133,7 +133,7 @@ def _operation_from_entry(entry: Any) -> Operation | None:
 
 
 def _synth_operation_id(method: str, template: str) -> str:
-    """A stable, readable operationId from method+template — e.g.
+    """A stable, readable operationId from method+template, e.g.
     ``get_invoices_invoice_id``. Reports prepend the method separately, so (unlike
     a literal ``GET /invoices/{id}``) this reads like a real operationId, not a
     doubled ``GET GET /invoices/{id}``. Unique per (method, template)."""
@@ -190,7 +190,7 @@ def _singular(word: str) -> str:
 
 def _schema_from_body(request: dict) -> dict | None:
     """A create-op's body source: wrap the recorded JSON body as ``example`` so
-    ``synthesize_body`` replays a body shaped like the real one — no seeder change."""
+    ``synthesize_body`` replays a body shaped like the real one, no seeder change."""
     post = request.get("postData")
     if not isinstance(post, dict):
         return None

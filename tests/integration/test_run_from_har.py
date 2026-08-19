@@ -2,7 +2,7 @@
 
 Loads operations from the committed HAR fixture (via the same dispatcher the CLI
 uses), then runs _run_pipeline against the demo API and asserts it reports the
-planted invoice BOLA and nothing on the secured documents control — the same
+planted invoice BOLA and nothing on the secured documents control: the same
 known answer as the OpenAPI golden test, proving a HAR-sourced catalog is a
 drop-in for the spec-sourced one. Auth is config-based, as designed.
 """

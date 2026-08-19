@@ -1,4 +1,4 @@
-"""Body-diff (§7) — the leak confirmer.
+"""Body-diff (§7): the leak confirmer.
 
 OWN THIS FILE. A broken-object-authorization leak returns a perfectly valid
 200 OK, so a status code alone proves nothing. This module is what turns a
@@ -6,7 +6,7 @@ non-owner 2xx into a *confirmed* leak: it checks that the response actually
 contains the owner's object. Refusing to confirm without that match is exactly
 what keeps false positives near zero (§7).
 
-Rule — containment, not equality:
+Rule: containment, not equality.
   1. Normalize both bodies by dropping volatile fields (timestamps, etags,
      last_seen) that legitimately change and shouldn't be required to match.
   2. Confirm a leak iff every non-volatile field of the OWNER's canonical object
@@ -14,9 +14,9 @@ Rule — containment, not equality:
      (canonical_nonvolatile ⊆ observed).
 
 Why:
-  * Containment (subset), not equality — a leaked response may carry extra
+  * Containment (subset), not equality: a leaked response may carry extra
     server-added fields; we require the owner's data to be present, not identical.
-  * The whole (non-volatile) object must be contained — that is what discriminates
+  * The whole (non-volatile) object must be contained: that is what discriminates
     a real leak from a coincidental overlap of a couple of default fields, and a
     near-miss (same shape, different values) fails on some field.
   * Conservative: a non-dict body, or a canonical with nothing but volatile
@@ -83,17 +83,17 @@ def confirm_injection(
     """Confirm a mass-assignment (D4): did injecting ``field=injected_value`` into an
     update actually take, as seen in the owner's re-read of the object?
 
-    A sibling of ``confirm_leak`` — same dict-only / equality / ``_MISSING``
-    discipline — but a *field-level* claim (one field took our value) rather than
+    A sibling of ``confirm_leak`` (same dict-only / equality / ``_MISSING``
+    discipline), but a *field-level* claim (one field took our value) rather than
     the whole-object containment ``confirm_leak`` proves. Returns ``True`` only
     when we can attribute the change to our injection:
 
-      * the re-read is an object (dict) — else we cannot decide (conservative);
-      * ``readback[field] == injected_value`` — the field is present AND holds the
+      * the re-read is an object (dict); else we cannot decide (conservative);
+      * ``readback[field] == injected_value``: the field is present AND holds the
         exact value we tried to set (not stripped, not coerced to something else);
       * when a ground-truth ``baseline_value`` is known (the value the field held
         BEFORE the injection, from the ledger's canonical body), the injected
-        value must actually DIFFER from it — otherwise the field would read as our
+        value must actually DIFFER from it, otherwise the field would read as our
         value even if the server ignored us and it merely already had that value.
     """
     if not isinstance(readback_body, dict):

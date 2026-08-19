@@ -1,4 +1,4 @@
-"""Unit tests for the Ownership Ledger (§5.7) — integrity is the whole point."""
+"""Unit tests for the Ownership Ledger (§5.7): integrity is the whole point."""
 
 import pytest
 

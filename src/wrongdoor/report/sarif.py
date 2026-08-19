@@ -1,7 +1,7 @@
-"""SARIF 2.1.0 reporter — GitHub/IDE-native security format (run -> results).
+"""SARIF 2.1.0 reporter: GitHub/IDE-native security format (run -> results).
 
 API findings have no source line, so results anchor to the OpenAPI spec file
-(``spec_uri``) — enough for GitHub to surface them; precise inline regions are a
+(``spec_uri``), enough for GitHub to surface them; precise inline regions are a
 later refinement.
 """
 

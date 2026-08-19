@@ -1,4 +1,4 @@
-"""Ownership Ledger (§5.7) — the one core data structure: ground truth.
+"""Ownership Ledger (§5.7): the one core data structure, ground truth.
 
 OWN THIS FILE. Everything the verdict engine later concludes rests on the ledger
 being correct: it is the record of "object X belongs to identity Y, and here is
@@ -7,12 +7,12 @@ file is written to make quiet corruption impossible, not to be clever.
 
 Design (each point is defensible in a viva):
 
-* Key by ``(resource_type, object_id)``, never bare ``object_id`` — real APIs
+* Key by ``(resource_type, object_id)``, never bare ``object_id``: real APIs
   reuse small ids across types (``invoice/1`` and ``user/1`` both exist), and a
   bare-id key would cross-wire ownership. ``object_id`` is normalized to ``str``
   because JSON returns ``1`` or ``"1"`` inconsistently.
 * Ownership is write-once ground truth. Recording the same ref with a *different*
-  owner raises ``LedgerError`` — that can only mean the target gave two identities
+  owner raises ``LedgerError``: that can only mean the target gave two identities
   the same id (an anomaly) or a seeder bug, and either would poison every verdict.
   Re-recording the *same* owner is allowed (idempotent).
 * ``canonical_body`` is the owner's view, stored opaquely; the ledger never
@@ -71,7 +71,7 @@ class OwnershipLedger:
         existing = self._entries.get(ref)
         if existing is not None and existing.owner != owner:
             # Two identities cannot both own the same object. This is either a
-            # target anomaly or a seeder bug — fail loud, don't corrupt truth.
+            # target anomaly or a seeder bug: fail loud, don't corrupt truth.
             raise LedgerError(
                 f"ownership conflict for {ref}: already owned by "
                 f"{existing.owner!r}, now claimed by {owner!r}"

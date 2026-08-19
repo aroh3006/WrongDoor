@@ -2,7 +2,7 @@
 Phase 1 scratch: a throwaway toy API to authenticate against.
 
 This is NOT the Phase 3 vulnerable demo (that lives in examples/vulnerable-api/
-and will have planted bugs). This one has no bugs to find — it is just enough
+and will have planted bugs). This one has no bugs to find: it is just enough
 plumbing to exercise WrongDoor's identity manager end to end:
 
     POST /login  {username, password}  -> {"access_token": ..., "token_type": "bearer"}

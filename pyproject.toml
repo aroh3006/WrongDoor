@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 # Dev-only: tests (pytest) and the throwaway toy API used as a live target in
-# Phase 1 (fastapi + uvicorn). NOT runtime deps — the shipped tool needs only
+# Phase 1 (fastapi + uvicorn). NOT runtime deps: the shipped tool needs only
 # the five above. The Phase 3 vulnerable demo API will formalize fastapi later.
 [project.optional-dependencies]
 dev = [

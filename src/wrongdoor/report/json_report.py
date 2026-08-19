@@ -1,4 +1,4 @@
-"""JSON reporter — the findings as structured data (stdlib json)."""
+"""JSON reporter: the findings as structured data (stdlib json)."""
 
 import json
 

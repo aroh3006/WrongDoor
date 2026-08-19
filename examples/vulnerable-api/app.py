@@ -1,4 +1,4 @@
-"""Deliberately-vulnerable demo API — WrongDoor's known-answer harness (§16).
+"""Deliberately-vulnerable demo API: WrongDoor's known-answer harness (§16).
 
 Two users in two tenants, and two resources built backwards from the finding:
 
@@ -363,11 +363,11 @@ def get_order(order_id: int, authorization: str | None = Header(default=None)) -
 # A user can update their OWN profile (owner-checked PATCH), but the handler
 # blindly binds a whitelist that WRONGLY includes `role`: so PATCHing your own
 # profile with {"role": "admin"} escalates you (the planted bug). `locked` is NOT
-# bindable from the body (the control) — an attempt to set it is silently ignored,
+# bindable from the body (the control): an attempt to set it is silently ignored,
 # so WrongDoor must report a VIOLATION on `role` and a PASS on `locked`.
 # GET/PATCH are both owner-checked, so profiles yields NO BOLA/unauth findings.
 _PROFILES: dict[int, dict] = {}
-_PROFILE_BINDABLE = {"role", "bio"}  # role should NOT be here — that's the bug
+_PROFILE_BINDABLE = {"role", "bio"}  # role should NOT be here, that's the bug
 
 
 class ProfileIn(BaseModel):

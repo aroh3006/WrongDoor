@@ -210,7 +210,7 @@ def test_seed_injects_parent_id_for_dependent_resource():
     owned = outcome.ledger.objects_owned_by("alice")
     org = next(e for e in owned if e.resource_type == "orgs")
     project = next(e for e in owned if e.resource_type == "projects")
-    # the project was created under alice's org — its id was injected into the body
+    # the project was created under alice's org: its id was injected into the body
     assert str(project.canonical_body["org_id"]) == org.object_id
 
 

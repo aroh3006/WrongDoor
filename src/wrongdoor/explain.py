@@ -1,9 +1,9 @@
-"""Explainer (§5.11, §10) — deterministic template prose for a finding.
+"""Explainer (§5.11, §10): deterministic template prose for a finding.
 
 The LLM is OFF and out of scope here (Phase 6, cosmetic only). These functions
 turn already-final finding facts into a sentence and a remediation; disabling any
-future LLM must leave the finding, verdict, score, and evidence byte-identical —
-only the wording could change. So the truth lives in the templates below.
+future LLM must leave the finding, verdict, score, and evidence byte-identical.
+Only the wording could change. So the truth lives in the templates below.
 
 Templates use field NAMES, never values (§13).
 """

@@ -3,7 +3,7 @@
 A profiles API where PATCH only honours a whitelist of fields (role, name): setting
 ``role`` sticks (the planted bug), setting ``locked`` is silently ignored (correct).
 The prober must report a VIOLATION for the field that stuck and a PASS for the one
-that didn't — proving both branches without a real server.
+that didn't, proving both branches without a real server.
 """
 
 import asyncio
@@ -116,7 +116,7 @@ def test_probe_skips_field_whose_value_equals_current_without_writing():
     judgments = asyncio.run(_run(cfg, registry, _OPS, guard, _ledger(dict(store[1000]))))
 
     assert len(judgments) == 1 and judgments[0].verdict is Verdict.INCONCLUSIVE
-    assert calls["n"] == 0  # nothing was sent — the injection would have tested nothing
+    assert calls["n"] == 0  # nothing was sent: the injection would have tested nothing
 
 
 def test_probe_skips_resource_with_no_update_op():

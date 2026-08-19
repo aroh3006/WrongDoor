@@ -4,16 +4,16 @@ A leaked object returns a perfectly valid 200 OK, so authorization can't be judg
 from a response in isolation. This function decides it *with* ground truth (the
 ledger): it knows who really owns the target and what the owner's object contains.
 
-It is a PURE function of its inputs — no I/O — so it is trivially testable and can
+It is a PURE function of its inputs (no I/O), so it is trivially testable and can
 never become an injection vector. Every branch below is a claim you must be able
 to defend.
 
 Four honest states (never collapse them):
-  PASS         secure — correctly denied, or an allowed access that succeeded.
+  PASS         secure: correctly denied, or an allowed access that succeeded.
   VIOLATION    confirmed leak, with evidence (matched fields + the request pair).
-  BROKEN       the app denied LEGITIMATE access (owner denied) — a bug, reported
+  BROKEN       the app denied LEGITIMATE access (owner denied): a bug, reported
                separately, never counted as a security pass.
-  INCONCLUSIVE needs a human — 5xx, 2xx with no body match, or an unexpected status.
+  INCONCLUSIVE needs a human: 5xx, 2xx with no body match, or an unexpected status.
 """
 
 from dataclasses import dataclass
@@ -42,7 +42,7 @@ class Judgment:
     request: PlannedRequest
     observed: ObservedResponse
     owner: str | None  # ground-truth owner of the target (from the ledger)
-    matched_fields: tuple[str, ...] = ()  # populated for a VIOLATION — the evidence
+    matched_fields: tuple[str, ...] = ()  # populated for a VIOLATION: the evidence
 
 
 def judge(
@@ -71,7 +71,7 @@ def judge(
             return result(Verdict.PASS, "authorized access succeeded")
         return result(Verdict.BROKEN, f"legitimate access denied (HTTP {status})")
 
-    # BFLA (D2) is function-level: no object to match, judged on status alone —
+    # BFLA (D2) is function-level: no object to match, judged on status alone,
     # a non-privileged identity reaching the operation at all is the finding.
     if request.check == "bfla":
         if status in (401, 403):
@@ -94,7 +94,7 @@ def judge(
         return result(Verdict.PASS, "correctly denied")
     if status == 404:
         # We KNOW the object exists (we created it), so a 404 to a non-owner is
-        # legitimate deny-by-info-hiding — not a missing object.
+        # legitimate deny-by-info-hiding, not a missing object.
         return result(Verdict.PASS, "denied via not-found (info hiding); object known to exist")
     if 200 <= status < 300:
         matched = confirm_leak(observed.body, entry.canonical_body)
@@ -104,8 +104,8 @@ def judge(
                 "confirmed BOLA: response contains the owner's object",
                 tuple(matched),
             )
-        # A 2xx alone is not a leak — a filtered/empty/generic 200 looks the same.
-        return result(Verdict.INCONCLUSIVE, "2xx to non-owner but no body match — needs review")
+        # A 2xx alone is not a leak: a filtered/empty/generic 200 looks the same.
+        return result(Verdict.INCONCLUSIVE, "2xx to non-owner but no body match, needs review")
 
     return result(Verdict.INCONCLUSIVE, f"unexpected status {status}")
 
@@ -119,12 +119,12 @@ def judge_injection(
     *,
     update_status: int,
 ) -> Judgment:
-    """The mass-assignment (D4) oracle — a PURE sibling of ``judge``.
+    """The mass-assignment (D4) oracle: a PURE sibling of ``judge``.
 
     ``judge`` decides BOLA from (attack response, ledger); this decides
     mass-assignment from (the update's status, the owner's re-read, the field's
-    pre-injection baseline). Like ``judge`` it does no I/O — the prober performs
-    the update and the re-read, then hands the bodies here — so the decision stays
+    pre-injection baseline). Like ``judge`` it does no I/O: the prober performs
+    the update and the re-read, then hands the bodies here, so the decision stays
     trivially testable and can't be an injection vector.
 
     ``observed`` is recorded as the UPDATE attempt's status paired with the owner's
@@ -133,7 +133,7 @@ def judge_injection(
     reproducible-attack line and ``--include-bodies``.
 
     Four honest states, decided by the PERSISTED state (a 2xx on the update alone
-    proves nothing — the field may have been silently stripped):
+    proves nothing, the field may have been silently stripped):
       * value already equalled the baseline, or a 5xx, or the object can't be
         re-read  -> INCONCLUSIVE (nothing was actually tested / can't confirm);
       * the field now holds our injected value (and it changed)  -> VIOLATION;
@@ -156,7 +156,7 @@ def judge_injection(
     if has_baseline and injected_value == baseline_value:
         return result(
             Verdict.INCONCLUSIVE,
-            f"probe value for {field!r} equals its current value — nothing tested",
+            f"probe value for {field!r} equals its current value, nothing tested",
         )
     if 500 <= update_status < 600:
         return result(Verdict.INCONCLUSIVE, f"server error on update (HTTP {update_status})")
@@ -184,5 +184,5 @@ def judge_all(
 
 
 def findings(judgments: list[Judgment]) -> list[Judgment]:
-    """The confirmed leaks — the judgments a report should surface as findings."""
+    """The confirmed leaks: the judgments a report should surface as findings."""
     return [j for j in judgments if j.verdict is Verdict.VIOLATION]

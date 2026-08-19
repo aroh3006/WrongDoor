@@ -217,14 +217,14 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# WrongDoor: local secrets file — identities reference env vars or a
-# .gitignore'd secrets file, never inline in config (see docs/blueprint.md §13).
+# WrongDoor: local secrets file (identities reference env vars or a
+# .gitignore'd secrets file, never inline in config; see docs/blueprint.md §13).
 secrets.yaml
 secrets.yml
 
-# Local Claude Code config — kept locally, not published to the public repo.
+# Local dev-tooling config: kept locally, not published to the public repo.
 CLAUDE.md
 .claude/
 
-# Internal design brief — kept locally for reference, not published.
+# Internal design brief: kept locally for reference, not published.
 docs/blueprint.md

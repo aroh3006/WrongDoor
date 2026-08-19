@@ -1,6 +1,6 @@
 """API-key auth (config type ``api_key``): attach a pre-issued key as a header.
 
-Same no-round-trip shape as ``bearer`` — the key is pre-issued, so we just set
+Same no-round-trip shape as ``bearer``: the key is pre-issued, so we just set
 the header on the client and every later request carries it. The header name is
 configurable (APIs disagree), and the plugin reports that header as sensitive so
 diagnostics redact it, whatever it was named.
@@ -24,7 +24,7 @@ class ApiKeyAuth:
     @property
     def sensitive_headers(self) -> frozenset[str]:
         """The (lowercased) header this plugin fills with a secret, so ``redacted``
-        masks the *configured* header — not just the hardcoded defaults."""
+        masks the *configured* header, not just the hardcoded defaults."""
         return frozenset({self._header.lower()})
 
     async def authenticate(self, client: httpx.AsyncClient) -> None:

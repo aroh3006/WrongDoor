@@ -1,5 +1,5 @@
 name: "WrongDoor"
-description: "Dynamic authorization (BOLA/IDOR) tester — fail the build on a confirmed leak."
+description: "Dynamic authorization (BOLA/IDOR) tester: fail the build on a confirmed leak."
 author: "aroh3006"
 branding:
   icon: "shield"

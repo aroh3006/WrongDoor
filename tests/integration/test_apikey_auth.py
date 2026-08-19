@@ -2,8 +2,8 @@
 
 Two identities authenticate with an X-API-Key header (no bearer / no login), seed
 a widget each against the demo API's key-protected resource, and the differential
-sweep reports the planted widgets BOLA. This proves the whole pipeline — manager
--> api-key plugin -> seeder -> planner -> executor -> verdict -> findings — works
+sweep reports the planted widgets BOLA. This proves the whole pipeline (manager
+-> api-key plugin -> seeder -> planner -> executor -> verdict -> findings) works
 end to end with key auth, not just the plugin in isolation.
 
 Kept off the main golden spec on purpose: widgets is a key-only resource, so a

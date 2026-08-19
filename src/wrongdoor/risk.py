@@ -1,4 +1,4 @@
-"""Risk Scorer (§9) — deterministic, hand-reconstructable severity.
+"""Risk Scorer (§9): deterministic, hand-reconstructable severity.
 
 No model, no score-of-0.87: a finding's severity is a small function of factors
 you can recite. severity = f(resource_sensitivity, cross_tenant, is_mutation):
@@ -55,7 +55,7 @@ def score(
         band = _bump(band)  # a write/delete is worse than the equivalent read
 
     if judgment.request.check == "unauth":
-        band = _bump(band)  # exposed to any anonymous caller — worse than a cross-identity leak
+        band = _bump(band)  # exposed to any anonymous caller: worse than a cross-identity leak
 
     if judgment.request.check == "bfla":
         band = _bump(band)  # a privileged function reachable by the under-privileged

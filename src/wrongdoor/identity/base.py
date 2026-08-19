@@ -21,14 +21,14 @@ class AuthedClient:
     """A live authenticated session for one identity.
 
     The credentials live *on* the httpx client (as a header, or in its cookie
-    jar), so downstream code just uses ``client`` — it never re-handles secrets.
+    jar), so downstream code just uses ``client``: it never re-handles secrets.
     """
 
     identity_id: str
     client: httpx.AsyncClient
     attributes: dict[str, str] = field(default_factory=dict)
     # Header names (lowercased) carrying THIS identity's secret beyond the
-    # always-sensitive defaults — e.g. a configured api-key header. Travels with
+    # always-sensitive defaults (e.g. a configured api-key header). Travels with
     # the client so any diagnostic can redact exactly what this identity sends.
     sensitive_headers: frozenset[str] = frozenset()
 
@@ -37,8 +37,8 @@ class AuthPlugin(Protocol):
     """One auth method. Given a client, make it authenticated for its identity.
 
     A plugin that puts a secret in a NON-default header (i.e. not authorization/
-    cookie) should also expose ``sensitive_headers`` — a frozenset of the
-    lowercased header names it fills — so ``redacted`` masks them. The manager
+    cookie) should also expose ``sensitive_headers`` (a frozenset of the
+    lowercased header names it fills) so ``redacted`` masks them. The manager
     reads it defensively, so plugins that only use default headers can omit it.
     """
 

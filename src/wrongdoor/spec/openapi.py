@@ -1,11 +1,11 @@
 """Spec importer (§5.4): OpenAPI document -> operation catalog.
 
-We lean on prance to load + resolve internal ``$ref``s (don't reimplement that —
+We lean on prance to load + resolve internal ``$ref``s (don't reimplement that;
 §4), then walk the resolved spec ourselves to build a small, typed ``Operation``
 list. The walk is a pure function of a resolved dict, so it's testable without
 prance touching a file.
 
-Scope note: only internal (``#/components/...``) refs are supported — the spec is
+Scope note: only internal (``#/components/...``) refs are supported: the spec is
 passed to prance as a string with no base path, so external/remote refs won't
 resolve. That's intentional for a single-file spec.
 """
@@ -38,7 +38,7 @@ class SpecError(Exception):
 class Parameter:
     name: str
     location: str  # "path" | "query" | "header" | ...
-    is_object_id: bool  # True for path params — the things a BOLA test swaps
+    is_object_id: bool  # True for path params: the things a BOLA test swaps
 
 
 @dataclass
@@ -47,7 +47,7 @@ class Operation:
     method: str  # upper-case: GET, POST, ...
     path_template: str  # e.g. /invoices/{invoice_id}
     kind: str  # "create" | "access"
-    resource_type: str  # e.g. "invoices" — ties a create op to its access ops
+    resource_type: str  # e.g. "invoices"; ties a create op to its access ops
     parameters: tuple[Parameter, ...] = ()
     request_schema: dict | None = None  # resolved JSON schema for the body (create ops)
 
@@ -112,7 +112,7 @@ def _classify(method: str, has_path_id: bool) -> str:
         return "create"  # POST /invoices -> makes a new object
     if method in ("get", "put", "patch", "delete") and has_path_id:
         return "access"  # GET/PUT/DELETE /invoices/{id} -> touches an existing object
-    return "other"  # e.g. an admin/collection endpoint — inert unless marked privileged
+    return "other"  # e.g. an admin/collection endpoint, inert unless marked privileged
 
 
 def _resource_type(path: str) -> str:

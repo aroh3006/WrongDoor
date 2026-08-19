@@ -168,7 +168,7 @@ def test_loader_roundtrip(tmp_path):
 
 
 def test_config_error_never_echoes_an_inline_secret(tmp_path):
-    # extra="forbid" rejects an inline secret — but the error output must NOT
+    # extra="forbid" rejects an inline secret, but the error output must NOT
     # contain the secret value (§13). Permanent regression guard.
     p = tmp_path / "config.yaml"
     p.write_text(

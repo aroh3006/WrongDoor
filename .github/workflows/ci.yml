@@ -42,7 +42,7 @@ jobs:
           done
           echo "demo did not start"; cat /tmp/demo.log; exit 1
 
-      - name: Run WrongDoor — it must flag the planted BOLA
+      - name: Run WrongDoor (it must flag the planted BOLA)
         env:
           ALICE_PW: alice-pw
           BOB_PW: bob-pw

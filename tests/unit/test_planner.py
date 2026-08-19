@@ -61,7 +61,7 @@ def test_third_identity_gets_planned_against_both_objects():
 def test_include_unauth_adds_anonymous_read_rows():
     planned = plan_matrix(_ledger(), _OPS, identities=["alice", "bob"], include_unauth=True)
     unauth = [p for p in planned if p.check == "unauth"]
-    # one anonymous GET per object (reads only — the DELETE is excluded)
+    # one anonymous GET per object (reads only; the DELETE is excluded)
     assert {(p.acting_identity, p.path) for p in unauth} == {
         (ANONYMOUS_ID, "/invoices/1000"),
         (ANONYMOUS_ID, "/invoices/1001"),

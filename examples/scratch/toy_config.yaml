@@ -1,5 +1,5 @@
 # WrongDoor config targeting the throwaway toy API (examples/scratch/toy_api.py).
-# Passwords are NOT here — they are referenced by env-var name (ALICE_PW/BOB_PW).
+# Passwords are NOT here: they are referenced by env-var name (ALICE_PW/BOB_PW).
 target:
   base_url: http://127.0.0.1:8000
   allow: [127.0.0.1]          # safety allowlist: the guard refuses anything else

@@ -39,7 +39,7 @@ class LoginAuth:
 
     @property
     def auth_urls(self) -> tuple[str, ...]:
-        """The URL this plugin POSTs credentials to — the manager gates it against
+        """The URL this plugin POSTs credentials to: the manager gates it against
         the allowlist before we send, same as any other live request."""
         return (self._url,)
 
@@ -48,7 +48,7 @@ class LoginAuth:
             self._url, json={"username": self._username, "password": self._password}
         )
         if resp.status_code // 100 != 2:
-            # Report the status only — never the response body or the credentials.
+            # Report the status only, never the response body or the credentials.
             raise AuthError(
                 f"login failed for {self._username!r}: HTTP {resp.status_code}"
             )
@@ -58,7 +58,7 @@ class LoginAuth:
             client.headers["Authorization"] = f"Bearer {token}"
             return
 
-        # No token in the body — did the endpoint set a session cookie instead?
+        # No token in the body: did the endpoint set a session cookie instead?
         if len(client.cookies) > 0:
             return  # cookie-based session; the jar carries it from here
 

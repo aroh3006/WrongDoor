@@ -3,7 +3,7 @@
 Fails fast with a readable ``ConfigError`` instead of a raw traceback, so a
 mistake in ``config.yaml`` reads like a helpful message, not a crash.
 
-Security: ``yaml.safe_load`` only — never ``yaml.load`` — so a hostile config
+Security: ``yaml.safe_load`` only, never ``yaml.load``, so a hostile config
 cannot construct arbitrary Python objects (the ``!!python/object/...`` tags).
 """
 
@@ -46,7 +46,7 @@ def _format_validation_error(exc: ValidationError) -> str:
 
     Never include pydantic's ``input`` value: an inline secret (correctly
     rejected by ``extra="forbid"``) would otherwise be echoed back into the error
-    output — the guard printing the very secret it caught (§13). ``loc`` is a
+    output: the guard printing the very secret it caught (§13). ``loc`` is a
     field path (names/indices) and the built-in/our-own ``msg`` texts carry no
     values, so this stays informative without leaking anything.
     """

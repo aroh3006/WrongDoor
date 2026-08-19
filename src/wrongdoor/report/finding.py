@@ -1,4 +1,4 @@
-"""Finding model + builder (§5.11, §11) — judgments enriched for reporting.
+"""Finding model + builder (§5.11, §11): judgments enriched for reporting.
 
 A ``Finding`` is a confirmed VIOLATION judgment plus its deterministic severity,
 explanation, remediation, a stable fingerprint, and the reproducible request pair.

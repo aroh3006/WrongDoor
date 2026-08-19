@@ -1,4 +1,4 @@
-"""Unit tests for the verdict oracle (§9, §16) — synthetic (request, response, ledger)
+"""Unit tests for the verdict oracle (§9, §16): synthetic (request, response, ledger)
 triples, no network. This is the four-state logic nailed in isolation."""
 
 from wrongdoor.engine.executor import ObservedResponse

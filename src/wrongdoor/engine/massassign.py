@@ -86,7 +86,7 @@ async def probe_mass_assignment(
             baseline = canonical[field] if known_baseline else None
 
             if known_baseline and value == baseline:
-                # Our probe value already equals the current value — sending would
+                # Our probe value already equals the current value, sending would
                 # test nothing. Record INCONCLUSIVE without a write.
                 judgments.append(
                     judge_injection(req, field, value, None, baseline_value=baseline, update_status=0)
@@ -123,7 +123,7 @@ async def _attempt_injection(
     completed; readback_body None == the object couldn't be re-read (-> INCONCLUSIVE)."""
     body = _update_body(canonical, id_field, field, value)
     update_path = _concrete(update_op, entry.object_id)
-    guard.assert_allowed(_join(base_url, update_path))  # LIVE WRITE — gate first
+    guard.assert_allowed(_join(base_url, update_path))  # LIVE WRITE, gate first
     try:
         resp = await authed.client.request(update_op.method, update_path, json=body)
     except httpx.HTTPError:
@@ -134,12 +134,12 @@ async def _attempt_injection(
 async def _read_back(
     authed: AuthedClient, get_op: Operation | None, entry, guard: SafetyGuard, base_url: str
 ) -> object:
-    """The owner's authoritative re-read — the confirming evidence. None if there's
+    """The owner's authoritative re-read: the confirming evidence. None if there's
     no GET op or the read didn't return a usable body."""
     if get_op is None:
         return None
     path = _concrete(get_op, entry.object_id)
-    guard.assert_allowed(_join(base_url, path))  # LIVE read — gate it
+    guard.assert_allowed(_join(base_url, path))  # LIVE read, gate it
     try:
         resp = await authed.client.get(path)
     except httpx.HTTPError:
@@ -154,7 +154,7 @@ async def _read_back(
 
 # --- helpers ---------------------------------------------------------------
 def _matching_update(accesses: list[Operation], resource_type: str) -> Operation | None:
-    """The single-id update op for a resource — PATCH preferred (partial), else PUT."""
+    """The single-id update op for a resource: PATCH preferred (partial), else PUT."""
     for method in ("PATCH", "PUT"):
         for op in accesses:
             if (
@@ -178,7 +178,7 @@ def _update_body(canonical, id_field: str | None, field: str, value) -> dict:
             drop.add(id_field)
         drop_lower = {d.lower() for d in drop}
         body = {k: v for k, v in normalize(canonical).items() if str(k).lower() not in drop_lower}
-    body[field] = value  # the injection — set last so it wins even if it was present
+    body[field] = value  # the injection, set last so it wins even if it was present
     return body
 
 

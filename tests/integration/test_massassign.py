@@ -3,7 +3,7 @@
 Two users each seed a profile, then the update-based prober PATCHes each owner's
 own profile injecting the declared protected fields. The demo blindly binds `role`
 (the planted bug) but ignores `locked` (the control), so WrongDoor must report a
-VIOLATION on `role` and a PASS on `locked` — proving both branches end to end
+VIOLATION on `role` and a PASS on `locked`, proving both branches end to end
 (manager -> seeder -> prober -> judge_injection -> findings) through the real ASGI
 app, not just the pure oracle.
 

@@ -1,6 +1,6 @@
 """Shared test setup.
 
-Puts examples/scratch/ on sys.path so tests can `import toy_api` — the toy API
+Puts examples/scratch/ on sys.path so tests can `import toy_api`. The toy API
 is a throwaway script, not an installed package, so it is not importable by
 default.
 """

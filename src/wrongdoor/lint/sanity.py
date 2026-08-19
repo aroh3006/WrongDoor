@@ -1,4 +1,4 @@
-"""Static Sanity Pass (§5.3) — a cheap, offline lint run BEFORE any live request.
+"""Static Sanity Pass (§5.3): a cheap, offline lint run BEFORE any live request.
 
 Pure and I/O-free (beyond reading env-var presence): it catches config mistakes
 before you waste a live run or create junk data. Errors block a run; warnings
@@ -33,7 +33,7 @@ class LintReport:
 
 def _dependency_cycle(dependencies) -> list[str] | None:
     """Return a cycle path in the child->parent dependency graph, or None. This is
-    the only graph traversal in the tool (§5.3) — a small DFS with a visiting set."""
+    the only graph traversal in the tool (§5.3): a small DFS with a visiting set."""
     parent_of = {d.resource: d.parent for d in dependencies}
     state: dict[str, str] = {}
 
