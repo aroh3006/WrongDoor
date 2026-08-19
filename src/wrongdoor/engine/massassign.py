@@ -1,31 +1,33 @@
-"""Mass-assignment prober (D4) — the "ground truth by construction" trick, pointed
-at a new question.
+"""Mass-assignment prober (D4): reuses the ledger's before/after ground-truth
+trick, pointed at a new question.
 
-OWN THIS FILE. BOLA asks "can a non-owner READ my object?"; mass-assignment (OWASP
-API3 / BOPLA) asks "can the owner SET a field they shouldn't control?" — e.g. PATCH
-your own profile with ``{"role": "admin"}`` and have it stick. This prober tests the
-update vector, reusing the ledger the seeder already built:
+Critical security boundary, since it writes: BOLA asks "can a non-owner READ my
+object?"; mass-assignment (OWASP API3 / BOPLA) asks "can the owner SET a field
+they shouldn't control?" (e.g. PATCH your own profile with ``{"role": "admin"}``
+and have it stick). This prober tests the update vector, reusing the ledger the
+seeder already built:
 
   * the ledger's ``canonical_body`` is the owner's view of the object *before* any
-    attack, so it is a free, ground-truth BASELINE — we know exactly what ``role``
+    attack, so it is a free, ground-truth BASELINE: we know exactly what ``role``
     was before we try to change it;
-  * we PATCH/PUT the object AS ITS OWNER (legitimate rights to call update — the
+  * we PATCH/PUT the object AS ITS OWNER (legitimate rights to call update; the
     question is only whether the body may set a protected field), injecting one
     declared ``protected_fields`` value chosen to differ from that baseline;
   * we RE-READ the object as the owner and let the pure ``judge_injection`` oracle
-    decide from the persisted state (a 2xx on the update proves nothing — the field
+    decide from the persisted state (a 2xx on the update proves nothing: the field
     may have been silently stripped).
 
 So confirmation stays at BOLA's evidentiary bar (a before/after differential on an
 object with known ground truth); only "which fields are protected" is config, since
 that is policy the tool cannot infer.
 
-Safety posture (mirrors the seeder — this writes):
+Safety posture (mirrors the seeder, since this writes):
   * runs ONLY under ``--include-mutations`` (the caller gates it) AND only for
-    resources that declare ``protected_fields`` — a double opt-in;
+    resources that declare ``protected_fields`` (a double opt-in);
   * sequential, and every update/read is gated by the Safety Guard first;
-  * bounded by the already-capped ledger (no new writes are invented — it mutates
+  * bounded by the already-capped ledger (no new writes are invented: it mutates
     objects the seeder already created, which ``--cleanup`` already tears down).
+Review carefully before modifying.
 """
 
 import httpx

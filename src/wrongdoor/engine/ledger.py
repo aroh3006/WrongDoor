@@ -1,9 +1,10 @@
 """Ownership Ledger (§5.7): the one core data structure, ground truth.
 
-OWN THIS FILE. Everything the verdict engine later concludes rests on the ledger
-being correct: it is the record of "object X belongs to identity Y, and here is
-Y's own copy of X." If this is wrong, every verdict is silently wrong. So this
-file is written to make quiet corruption impossible, not to be clever.
+Critical correctness boundary: everything the verdict engine later concludes rests
+on the ledger being correct. It is the record of "object X belongs to identity Y,
+and here is Y's own copy of X." If this is wrong, every verdict is silently wrong.
+Written to make quiet corruption impossible, not to be clever. Review carefully
+before modifying.
 
 Design (each point is defensible in a viva):
 

@@ -1,9 +1,9 @@
 """Seeder (§5.6): ground truth by construction.
 
-OWN THIS FILE. The seeder creates real objects as each identity and records who
-owns what into the ledger. That recorded ownership is the fact every later
-verdict depends on, and this phase *writes real data*, so safety and correctness
-both live here.
+Critical security boundary: the seeder creates real objects as each identity and
+records who owns what into the ledger. That recorded ownership is the fact every
+later verdict depends on, and this phase *writes real data*, so safety and
+correctness both live here. Review carefully before modifying.
 
 Algorithm, for each create-op x each identity:
   1. synthesize a valid body from the op's schema;

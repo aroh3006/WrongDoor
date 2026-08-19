@@ -1,4 +1,5 @@
-"""Verdict Engine (§5.10, §9) — the oracle. OWN THIS FILE COMPLETELY.
+"""Verdict Engine (§5.10, §9): the oracle. The single most critical file in the
+tool, since every finding traces back to it.
 
 A leaked object returns a perfectly valid 200 OK, so authorization can't be judged
 from a response in isolation. This function decides it *with* ground truth (the
@@ -6,7 +7,7 @@ ledger): it knows who really owns the target and what the owner's object contain
 
 It is a PURE function of its inputs (no I/O), so it is trivially testable and can
 never become an injection vector. Every branch below is a claim you must be able
-to defend.
+to defend. Review carefully before modifying.
 
 Four honest states (never collapse them):
   PASS         secure: correctly denied, or an allowed access that succeeded.

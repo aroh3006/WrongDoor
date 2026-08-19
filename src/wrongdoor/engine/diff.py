@@ -1,10 +1,10 @@
 """Body-diff (§7): the leak confirmer.
 
-OWN THIS FILE. A broken-object-authorization leak returns a perfectly valid
-200 OK, so a status code alone proves nothing. This module is what turns a
+Core correctness boundary: a broken-object-authorization leak returns a perfectly
+valid 200 OK, so a status code alone proves nothing. This module is what turns a
 non-owner 2xx into a *confirmed* leak: it checks that the response actually
 contains the owner's object. Refusing to confirm without that match is exactly
-what keeps false positives near zero (§7).
+what keeps false positives near zero (§7). Review carefully before modifying.
 
 Rule: containment, not equality.
   1. Normalize both bodies by dropping volatile fields (timestamps, etags,

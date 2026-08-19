@@ -4,8 +4,9 @@ Sends each PlannedRequest as its acting identity's client, concurrently but
 bounded by a semaphore so WrongDoor can't accidentally hammer the target. Returns
 (request, response) pairs: that pairing is the evidence a finding is built from.
 
-Not an "own this" file: it is I/O plumbing. It makes no security decision — it
-only records the status and (size-capped) body for the verdict engine to judge.
+Lower-risk than the rest of the engine: it is I/O plumbing, not a security
+decision point. It only records the status and (size-capped) body for the
+verdict engine to judge.
 """
 
 import asyncio

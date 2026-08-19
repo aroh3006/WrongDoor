@@ -1,11 +1,11 @@
-"""OAuth2 auth (config type ``oauth2``) — the one plugin that participates in
+"""OAuth2 auth (config type ``oauth2``): the one plugin that participates in
 every request's lifecycle instead of setting a header once.
 
-OWN THIS FILE. A bearer token can expire mid-run, so correct behavior is to see
-the 401 and re-issue the request with a fresh token. httpx's own extension point
-for that is ``httpx.Auth.async_auth_flow`` — a generator that yields a request,
-receives the response, and may yield again to retry. So this plugin *is* an
-``httpx.Auth``:
+Critical security boundary, handling live credentials: a bearer token can expire
+mid-run, so correct behavior is to see the 401 and re-issue the request with a
+fresh token. httpx's own extension point for that is
+``httpx.Auth.async_auth_flow``, a generator that yields a request, receives the
+response, and may yield again to retry. So this plugin *is* an ``httpx.Auth``:
 
   * ``authenticate`` fetches an initial token up front (failing fast on bad
     credentials, like ``login``) and installs itself as ``client.auth``;
@@ -20,8 +20,9 @@ token refreshes; the rest find the token already changed and reuse it.
 
 Grants: ``client_credentials`` and resource-owner ``password`` (the two
 non-interactive grants). Refresh uses ``grant_type=refresh_token`` when the
-server issued a refresh token, otherwise it re-runs the original grant — which
+server issued a refresh token, otherwise it re-runs the original grant, which
 is the right fallback for client-credentials, which typically issues none.
+Review carefully before modifying.
 """
 
 import asyncio

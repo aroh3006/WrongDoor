@@ -1,19 +1,19 @@
-"""Safety Guard (§5.9, §13) — the single choke point in front of all live I/O.
+"""Safety Guard (§5.9, §13): the single choke point in front of all live I/O.
 
-OWN THIS FILE. Nothing in WrongDoor may send a live request without this guard
-saying yes first. Its whole job is to make it hard to point the tool — which
-authenticates as real users and (later) creates real data — at something you
-don't own or didn't mean to hit.
+Critical security boundary: nothing in WrongDoor may send a live request without
+this guard saying yes first. The tool authenticates as real users and (later)
+creates real data, so this is what makes it hard to point it at something you
+don't own or didn't mean to hit. Review carefully before modifying.
 
 Phase 1 enforces two gates:
-  1. Host allowlist  — the target's host must exactly match an entry in
+  1. Host allowlist: the target's host must exactly match an entry in
      ``config.target.allow``. Exact hostname match, never a substring.
-  2. Confirmation    — the operator must have passed ``--confirm-own-target``.
+  2. Confirmation: the operator must have passed ``--confirm-own-target``.
 
 Design principles (each is a line you should be able to defend in a viva):
 
-* **Fail closed.** Anything ambiguous — unparseable URL, missing host,
-  non-http(s) scheme, empty allowlist, no matching entry — is a refusal, never
+* **Fail closed.** Anything ambiguous (unparseable URL, missing host,
+  non-http(s) scheme, empty allowlist, no matching entry) is a refusal, never
   a maybe. The safe default is "no".
 * **Exact hostname equality.** Substring / ``endswith`` checks are how allowlists
   get bypassed: ``staging.myapp.test.evil.com`` "contains" ``staging.myapp.test``,

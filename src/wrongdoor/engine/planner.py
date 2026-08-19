@@ -1,9 +1,10 @@
 """Matrix Planner (§5.8): build the list of cross-identity requests to try.
 
-OWN THIS FILE. The planner decides *what gets tested*: for every object whose
-owner we know (from the ledger), it schedules an access attempt by every identity
-that should NOT be allowed. Get this wrong and you either miss leaks (too few
-cells) or waste requests / create noise (too many).
+Critical coverage boundary: the planner decides *what gets tested*, for every
+object whose owner we know (from the ledger), it schedules an access attempt by
+every identity that should NOT be allowed. Get this wrong and you either miss
+leaks (too few cells) or waste requests / create noise (too many). Review
+carefully before modifying.
 
 Design (defensible):
 
