@@ -225,3 +225,6 @@ secrets.yml
 # Local Claude Code config — kept locally, not published to the public repo.
 CLAUDE.md
 .claude/
+
+# Internal design brief — kept locally for reference, not published.
+docs/blueprint.md
