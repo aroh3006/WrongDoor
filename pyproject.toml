@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wrongdoor"
-version = "0.0.0"
+version = "0.1.0"
 description = "Dynamic differential authorization tester: seeds real data per identity and proves cross-identity leaks."
 readme = "README.md"
 requires-python = ">=3.12"
