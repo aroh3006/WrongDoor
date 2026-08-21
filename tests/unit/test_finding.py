@@ -200,6 +200,30 @@ def test_mass_assignment_low_sensitivity_is_high():
     assert f.severity is Severity.HIGH
 
 
+def test_bfla_finding_never_renders_a_none_owner():
+    # A function-level finding has no owning identity. The request pair must not
+    # print "(as None)", which reads like a bug in the report.
+    req = PlannedRequest(
+        acting_identity="bob",
+        method="GET",
+        path="/admin/all-invoices",
+        operation_id="getAllInvoices",
+        target=ObjectRef("all-invoices", "*"),
+        expected=Expectation.DENY,
+        is_mutation=False,
+        check="bfla",
+    )
+    j = Judgment(
+        verdict=Verdict.VIOLATION, reason="x", request=req,
+        observed=ObservedResponse(status=200, body={"invoices": []}),
+        owner=None, matched_fields=(),
+    )
+    f = build_findings([j], _config())[0]
+    assert "None" not in f.canonical_request()
+    assert "privileged role" in f.canonical_request()
+    assert f.attack_request() == "GET /admin/all-invoices (as bob) -> 200"
+
+
 def test_bfla_violation_becomes_bfla_finding():
     req = PlannedRequest(
         acting_identity="bob",

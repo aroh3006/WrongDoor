@@ -45,6 +45,11 @@ class Finding:
     judgment: Judgment  # retained for optional --include-bodies; never serialized by default
 
     def canonical_request(self) -> str:
+        # A function-level (BFLA) finding has no owning identity, so there is no
+        # "the owner's own legitimate request" to show. Say that plainly rather
+        # than printing "(as None)".
+        if self.owner is None:
+            return f"{self.method} {self.path} (requires a privileged role)"
         return f"{self.method} {self.path} (as {self.owner}) -> 200"
 
     def attack_request(self) -> str:

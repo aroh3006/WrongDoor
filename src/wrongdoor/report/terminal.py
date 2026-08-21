@@ -29,23 +29,34 @@ def render(console: Console, judgments: list[Judgment], findings: list[Finding])
         lines = [
             f"severity:  {f.severity.name}",
             f"actor:     {f.actor}" + (f" (tenant {f.actor_tenant})" if f.actor_tenant else ""),
-            f"victim:    {f.owner}"
-            + (f" (tenant {f.owner_tenant})" if f.owner_tenant else "")
-            + f" owns {f.resource_type}/{f.object_id}",
+            f"victim:    {_victim_line(f)}",
             f"operation: {f.method} {f.operation_id}",
             "",
             "reproducible request pair:",
             f"  canonical: {f.canonical_request()}",
             f"  attack:    {f.attack_request()}",
-            "",
-            f"body match: {', '.join(f.matched_fields)}",
-            "",
-            f"fix: {f.remediation}",
         ]
+        # A function-level (BFLA) finding matches no object, so there are no
+        # field names to show. Printing an empty "body match:" line just looks
+        # like something failed to render.
+        if f.matched_fields:
+            lines += ["", f"body match: {', '.join(f.matched_fields)}"]
+        lines += ["", f"fix: {f.remediation}"]
         console.print(
             Panel(
                 "\n".join(lines),
-                title=f"{f.severity.name} · {f.finding_type} · {f.operation_id}",
+                # ASCII separators only: the default Windows console codepage
+                # mangles characters like the middle dot.
+                title=f"{f.severity.name} | {f.finding_type} | {f.operation_id}",
                 border_style="red",
             )
         )
+
+
+def _victim_line(f: Finding) -> str:
+    """Who was harmed. A BFLA finding is function-level, so it has no owning
+    identity and no object to name."""
+    if f.owner is None:
+        return f"n/a (function-level: {f.resource_type})"
+    tenant = f" (tenant {f.owner_tenant})" if f.owner_tenant else ""
+    return f"{f.owner}{tenant} owns {f.resource_type}/{f.object_id}"
