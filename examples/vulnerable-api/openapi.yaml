@@ -169,6 +169,52 @@ paths:
       responses:
         "204":
           description: deleted
+  /profiles:
+    post:
+      operationId: createProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileIn"
+      responses:
+        "201":
+          description: created
+  /profiles/{profile_id}:
+    get:
+      operationId: getProfile
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
+    patch:
+      operationId: updateProfile
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
+    delete:
+      operationId: deleteProfile
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: deleted
 components:
   schemas:
     InvoiceIn:
@@ -208,3 +254,8 @@ components:
         name:
           type: string
       required: [org_id]
+    ProfileIn:
+      type: object
+      properties:
+        bio:
+          type: string

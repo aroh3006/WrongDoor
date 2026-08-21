@@ -96,11 +96,39 @@ def test_cleanup_removes_only_the_seeded_objects(monkeypatch):
     _, cleanup = asyncio.run(_run_pipeline(cfg, ops, guard, transport=transport, cleanup=True))
 
     assert cleanup is not None
-    assert cleanup.total == 10  # 5 resources x 2 identities seeded this run
-    # invoices/notes/orgs/projects each have a DELETE op (2 objects each) -> 8 deleted.
-    assert cleanup.deleted == 8
+    assert cleanup.total == 12  # 6 resources x 2 identities seeded this run
+    # invoices/notes/orgs/projects/profiles each have a DELETE op (2 each) -> 10 deleted.
+    assert cleanup.deleted == 10
     # documents has NO DELETE op in the spec -> its 2 objects are reported, not deleted.
     assert len(cleanup.left_behind) == 2
     assert all("documents/" in n and "no delete operation" in n for n in cleanup.left_behind)
     # orgs deleted cleanly (never a 409) -> proves projects were removed BEFORE their org.
     assert not any("orgs/" in n for n in cleanup.left_behind)
+
+
+def test_shipped_demo_config_demonstrates_mass_assignment(monkeypatch):
+    """The demo config ships protected_fields, so --include-mutations shows D4.
+
+    This is the path a reader follows from the README quickstart. It must flag
+    the bindable `role` and stay quiet about the correctly-ignored `locked`.
+    """
+    monkeypatch.setenv("ALICE_PW", "alice-pw")
+    monkeypatch.setenv("BOB_PW", "bob-pw")
+
+    cfg = load_config(_VULN / "config.yaml")
+    ops = load_operations(_VULN / "openapi.yaml")
+    guard = SafetyGuard(allow=cfg.target.allow, confirm_own_target=True)
+    transport = httpx.ASGITransport(app=vulnerable_app)
+
+    judgments, _ = asyncio.run(
+        _run_pipeline(cfg, ops, guard, transport=transport, include_mutations=True)
+    )
+    ma = [j for j in judgments if j.request.check == "massassign"]
+
+    # role sticks (the planted bug) for both identities; locked is ignored.
+    violations = [j for j in ma if j.verdict is Verdict.VIOLATION]
+    assert len(violations) == 2
+    assert all(j.matched_fields == ("role",) for j in violations)
+    assert {j.owner for j in violations} == {"alice", "bob"}
+    locked = [j for j in ma if "locked" in j.reason]
+    assert len(locked) == 2 and all(j.verdict is Verdict.PASS for j in locked)

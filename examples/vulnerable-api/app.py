@@ -415,3 +415,14 @@ async def update_profile(profile_id: int, request: Request, authorization: str |
         if key in _PROFILE_BINDABLE:  # blind bind: `role` slips through -> mass-assignment
             profile[key] = value
     return profile
+
+
+@app.delete("/profiles/{profile_id}", status_code=204)
+def delete_profile(profile_id: int, authorization: str | None = Header(default=None)) -> None:
+    user = _require_user(authorization)  # owner-only delete (cleanup uses the owner)
+    profile = _PROFILES.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if profile["owner"] != user:
+        raise HTTPException(status_code=403, detail="forbidden")
+    del _PROFILES[profile_id]

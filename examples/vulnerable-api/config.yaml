@@ -20,6 +20,13 @@ resources:
   documents: {sensitivity: low}
   notes: {sensitivity: medium}     # missing-auth read -> unauthenticated bump to High
   projects: {sensitivity: medium}
+  profiles:
+    sensitivity: high
+    # Mass-assignment (D4): fields a client must never be able to set itself.
+    # Only checked with --include-mutations, since the probe writes.
+    # The app wrongly binds `role` from the body (the bug) and ignores `locked`
+    # (the control), so a run should flag `role` and pass on `locked`.
+    protected_fields: {role: admin, locked: true}
 operations:
   getAllInvoices: {privileged: true, requires_role: admin}   # BFLA: no role check in the app
   getAllUsers: {privileged: true, requires_role: admin}      # control: app DOES check the role
