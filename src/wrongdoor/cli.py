@@ -13,6 +13,7 @@ Exit codes (so CI can tell the failure modes apart):
 """
 
 import asyncio
+import errno
 from pathlib import Path
 
 import typer
@@ -198,7 +199,7 @@ async def _run_seed(cfg: Config, operations: list[Operation], guard: SafetyGuard
 
 def _print_ledger(outcome: SeedOutcome) -> None:
     ledger = outcome.ledger
-    table = Table(title=f"Ownership ledger — {len(ledger)} object(s)")
+    table = Table(title=f"Ownership ledger: {len(ledger)} object(s)")
     table.add_column("resource")
     table.add_column("object_id", justify="right")
     table.add_column("owner")
@@ -349,7 +350,7 @@ async def _run_pipeline(
 
 
 def _print_dry_run(cfg: Config, operations: list[Operation]) -> None:
-    _out.print(f"[bold]dry run[/bold] — target {cfg.target.base_url} (no requests will be sent)")
+    _out.print(f"[bold]dry run[/bold] against {cfg.target.base_url} (no requests will be sent)")
     _out.print("identities: " + ", ".join(i.id for i in cfg.identities))
     creates = ", ".join(f"{o.method} {o.path_template}" for o in create_operations(operations)) or "(none)"
     accesses = ", ".join(f"{o.method} {o.path_template}" for o in access_operations(operations)) or "(none)"
@@ -385,3 +386,21 @@ def _emit_report(
         _out.print(f"wrote {report_format} report to {output}")
     else:
         print(text)  # raw stdout so machine output stays valid
+
+
+def main() -> None:
+    """Console-script entry point.
+
+    Wraps the app so a closed stdout (`wrongdoor run ... | head`) exits quietly
+    instead of dumping a traceback. Windows raises OSError/EINVAL rather than
+    BrokenPipeError for this, so both are handled. 120 is the conventional
+    "killed by SIGPIPE" exit code (128 + 13).
+    """
+    try:
+        app()
+    except BrokenPipeError:
+        raise SystemExit(120)
+    except OSError as e:
+        if e.errno == errno.EINVAL:  # closed pipe on Windows
+            raise SystemExit(120)
+        raise
