@@ -63,6 +63,14 @@ def login(body: LoginBody) -> dict:
     return {"access_token": token, "token_type": "bearer"}
 
 
+@app.get("/me")
+def whoami(authorization: str | None = Header(default=None)) -> dict:
+    """Who the caller is. This is the default probe for `wrongdoor auth-check`,
+    so the identities in the demo config can be verified before a full run."""
+    user = _require_user(authorization)
+    return {"username": user, "tenant": _USERS[user]["tenant"]}
+
+
 @app.post("/invoices", status_code=201)
 def create_invoice(body: InvoiceIn, authorization: str | None = Header(default=None)) -> dict:
     global _next_id
