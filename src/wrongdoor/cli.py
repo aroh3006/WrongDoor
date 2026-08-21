@@ -1,15 +1,18 @@
-"""WrongDoor CLI (§5.1): Phase 1 slice.
+"""WrongDoor CLI (§5.1): the command surface.
 
-Wires ConfigLoader -> SafetyGuard -> IdentityManager and prints each identity's
-response to a probe endpoint. No analysis here; that arrives in later phases.
+Wires config loading -> safety guard -> identity manager -> seeder -> planner ->
+executor -> verdict -> reporters. Commands: `auth-check`, `lint`, `seed`, `run`.
 
-Exit codes (so CI can distinguish failure modes later):
-  0 ok · 2 config error · 3 safety refusal · 4 authentication failure
+Exit codes (so CI can tell the failure modes apart):
+  0 ok
+  1 a finding at or above --fail-on
+  2 config error
+  3 safety refusal
+  4 authentication failure
+  5 spec error
 """
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 
 import typer
@@ -17,7 +20,6 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .banner import print_banner
 from .config.loader import ConfigError, load_config
 from .config.schema import Config
 from .engine.executor import execute
@@ -42,20 +44,34 @@ from .spec.openapi import (
     create_operations,
 )
 
-app = typer.Typer(add_completion=False, help="WrongDoor — dynamic authorization tester.")
+app = typer.Typer(
+    add_completion=False,
+    help="WrongDoor: dynamic authorization tester. Seeds real data as each identity, "
+    "then proves whether one identity can reach another's.",
+)
 _out = Console()
 _err = Console(stderr=True)
 
 
-@app.callback()
-def _startup() -> None:
-    """Runs before any subcommand: print the banner to stderr.
+def _version_callback(value: bool) -> None:
+    if value:
+        print(f"wrongdoor {__version__}")
+        raise typer.Exit()
 
-    The banner is decorative, so it goes to stderr; stdout stays clean for
-    machine output (e.g. `wrongdoor run --format json | jq`).
-    """
-    with contextlib.redirect_stdout(sys.stderr):
-        print_banner(__version__)
+
+@app.callback()
+def _startup(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show the version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    """Runs before any subcommand. Prints nothing, so stdout stays clean for
+    machine output (e.g. `wrongdoor run --format json | jq`)."""
 
 
 @app.command("auth-check")
@@ -68,7 +84,7 @@ def auth_check(
     ),
     probe: str = typer.Option("/me", "--probe", help="Path to GET as each identity"),
 ) -> None:
-    """Authenticate every identity and print its response to ``probe``."""
+    """Authenticate every identity and print its response to the probe path."""
     try:
         cfg = load_config(config)
     except ConfigError as e:

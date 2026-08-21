@@ -118,5 +118,5 @@ Severity gets one extra `massassign` bump on top of the existing mutation bump. 
 
 openapi-core would handle request and response *validation*. We don't need that yet. It's held off until a later phase actually needs it.
 
-### Banner to stderr
-The startup banner is just decorative. Because of that, it prints to stderr instead of stdout. That way stdout stays clean for machine-readable output, like `wrongdoor run --format json | jq`.
+### The CLI prints nothing decorative on startup
+Running a command goes straight to doing the work. There's no startup banner or splash output. Anything that isn't a result is noise for someone piping output into another tool. Operational notes still go to stderr. That keeps stdout clean for machine-readable output, like `wrongdoor run --format json | jq`.
