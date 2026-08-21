@@ -39,6 +39,36 @@ def test_resolve_secret_missing(monkeypatch):
         resolve_secret("WD_MISSING")
 
 
+def test_missing_secret_error_is_actionable(monkeypatch):
+    # The most common mistake is setting the var in another terminal, so the
+    # error has to name the variable AND show how to set it in both shells.
+    monkeypatch.delenv("WD_MISSING", raising=False)
+    with pytest.raises(AuthError) as ei:
+        resolve_secret("WD_MISSING")
+    msg = str(ei.value)
+    assert "WD_MISSING is not set" in msg
+    assert "$env:WD_MISSING" in msg  # PowerShell syntax
+    assert "export WD_MISSING=" in msg  # bash/zsh syntax
+    assert "same terminal" in msg
+
+
+def test_empty_secret_reports_a_different_cause(monkeypatch):
+    # Set-but-empty is a different mistake from unset. Saying which one it is
+    # saves the user from re-setting a variable that is already there.
+    monkeypatch.setenv("WD_EMPTY", "")
+    with pytest.raises(AuthError) as ei:
+        resolve_secret("WD_EMPTY")
+    assert "WD_EMPTY is set but empty" in str(ei.value)
+
+
+def test_missing_secret_error_never_echoes_a_value(monkeypatch):
+    # Regression guard: the error must name the variable, never its value (§13).
+    monkeypatch.setenv("WD_EMPTY_SECRET", "")
+    with pytest.raises(AuthError) as ei:
+        resolve_secret("WD_EMPTY_SECRET")
+    assert "your-value" in str(ei.value)  # only the placeholder, never a real one
+
+
 def test_redacted_masks_sensitive():
     out = redacted(
         {"Authorization": "Bearer x", "Cookie": "a=b", "Accept": "application/json"}

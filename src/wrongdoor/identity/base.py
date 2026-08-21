@@ -11,6 +11,11 @@ from typing import Iterable, Protocol
 
 import httpx
 
+# Shown when a secret env var is missing. Windows users are overwhelmingly on
+# PowerShell, so lead with the syntax that matches the platform.
+_POWERSHELL_HINT = '$env:{name} = "your-value"'
+_POSIX_HINT = 'export {name}="your-value"'
+
 
 class AuthError(Exception):
     """Raised when an identity cannot be authenticated (bad creds, missing secret…)."""
@@ -54,8 +59,29 @@ def resolve_secret(env_name: str) -> str:
     """
     value = os.environ.get(env_name)
     if not value:
-        raise AuthError(f"missing or empty secret env var: {env_name}")
+        # A set-but-empty var is a different mistake from an unset one, so say
+        # which it is. The most common cause of "unset" is setting it in another
+        # terminal, so the hint calls that out with copy-pasteable syntax.
+        state = (
+            "is set but empty" if env_name in os.environ else "is not set"
+        )
+        raise AuthError(_missing_secret_message(env_name, state))
     return value
+
+
+def _missing_secret_message(env_name: str, state: str) -> str:
+    """Actionable text for a missing secret. Names the variable, never a value."""
+    hints = [_POWERSHELL_HINT, _POSIX_HINT] if os.name == "nt" else [_POSIX_HINT, _POWERSHELL_HINT]
+    labels = ["PowerShell", "bash/zsh"] if os.name == "nt" else ["bash/zsh", "PowerShell"]
+    lines = [
+        f"environment variable {env_name} {state}.",
+        "",
+        f"The config references this secret by name, so {env_name} has to hold the",
+        "value. Set it in the same terminal you run wrongdoor from, then re-run:",
+        "",
+    ]
+    lines += [f"  {label:<11} {hint.format(name=env_name)}" for label, hint in zip(labels, hints)]
+    return "\n".join(lines)
 
 
 # Header names whose values must never be printed/logged. This is the baseline;
